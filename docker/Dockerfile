@@ -8,13 +8,16 @@ ARG LLVM_MINGW_VERSION=20260826
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+LABEL org.opencontainers.image.source="https://github.com/Apex-Studio-Dev/apex-android-toolchains"
+LABEL org.opencontainers.image.description="Builder image for Apex Android LLVM and NDK toolchains"
+
 # Core build system & dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends software-properties-common \
     && apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates aria2 curl wget xz-utils unzip git make cmake ninja-build \
         build-essential file p7zip-full python3 python3-pip python3-dev python3-setuptools \
         autoconf automake libtool autoconf-archive pkg-config rsync \
-        clang lld patchelf binutils zstd \
+        clang lld patchelf binutils zstd ccache \
         zlib1g-dev libssl-dev libxml2-dev liblzma-dev libbz2-dev uuid-dev cpio bzip2 \
         qemu-user-static binfmt-support \
     && rm -rf /var/lib/apt/lists/*
@@ -71,5 +74,6 @@ RUN arch="$(uname -m)"; \
     fi
 
 ENV PATH="/opt/zig:${PATH}"
+ENV CCACHE_DIR=/work/.ccache
 
 WORKDIR /work

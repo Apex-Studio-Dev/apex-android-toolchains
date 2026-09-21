@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       revision:
-        description: "Exact Android Clang revision (e.g. clang-r487747e)"
+        description: "Exact Android Clang revision (or 'all' for full matrix)"
         required: true
         default: "clang-r487747e"
         type: choice
         options:
+          - "all"
           - "clang-r487747c"
           - "clang-r487747d"
           - "clang-r487747e"
@@ -38,9 +39,45 @@ permissions:
   packages: read
 
 jobs:
-  build-llvm:
-    name: Build LLVM ${{ inputs.revision || github.ref_name }}
+  matrix-init:
+    name: Initialize Build Matrix
     runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      platform: ${{ steps.set-matrix.outputs.platform }}
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Compute Matrix
+        id: set-matrix
+        run: |
+          PLATFORM="${{ inputs.platform || 'bionic' }}"
+          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+            REV="clang-${TAG#llvm-}"
+            echo "matrix=[\"$REV\"]" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.revision }}" = "all" ]; then
+            REVS=$(python3 -c "
+          import yaml, json
+          with open('metadata/llvm-releases.yaml') as f:
+              data = yaml.safe_load(f)
+          print(json.dumps([x['revision'] for x in data['releases']]))
+          ")
+            echo "matrix=$REVS" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=[\"${{ inputs.revision }}\"]" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-llvm:
+    name: Build LLVM ${{ matrix.revision }}
+    needs: matrix-init
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: ${{ fromJson(needs.matrix-init.outputs.matrix) }}
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
@@ -73,6 +110,15 @@ jobs:
       - name: Checkout Monorepo
         uses: actions/checkout@v4
 
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: /mnt/build/.ccache
+          key: llvm-ccache-${{ matrix.revision }}-${{ github.sha }}
+          restore-keys: |
+            llvm-ccache-${{ matrix.revision }}-
+            llvm-ccache-
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -86,14 +132,9 @@ jobs:
       - name: Determine Revision and Tag
         id: meta
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            TAG="${{ github.ref_name }}"
-            REV="clang-${TAG#llvm-}"
-          else
-            REV="${{ inputs.revision }}"
-            TAG="llvm-${REV#clang-}"
-          fi
-          PLATFORM="${{ inputs.platform || 'bionic' }}"
+          REV="${{ matrix.revision }}"
+          TAG="llvm-${REV#clang-}"
+          PLATFORM="${{ needs.matrix-init.outputs.platform }}"
           echo "revision=$REV" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
@@ -104,7 +145,9 @@ jobs:
           OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           IMAGE="ghcr.io/${OWNER}/apex-toolchains-builder:latest"
           echo "BUILDER_IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          if ! docker pull "$IMAGE"; then
+          if docker pull "$IMAGE"; then
+            echo "Successfully pulled $IMAGE from GHCR."
+          else
             echo "GHCR image not found or inaccessible; building locally from docker/Dockerfile..."
             docker build -t "$IMAGE" -f docker/Dockerfile docker/
           fi
@@ -116,6 +159,7 @@ jobs:
             -w /work \
             --user "$(id -u):$(id -g)" \
             -e HOME=/work \
+            -e CCACHE_DIR=/work/.ccache \
             "$BUILDER_IMAGE" \
             scripts/build-llvm.sh \
               --revision="${{ steps.meta.outputs.revision }}" \
@@ -134,12 +178,31 @@ jobs:
               --dir="build/${{ steps.meta.outputs.revision }}/install" \
               --revision="${{ steps.meta.outputs.revision }}"
 
+      - name: Generate Release Notes
+        run: |
+          REV="${{ steps.meta.outputs.revision }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          mkdir -p build
+          cat <<EOF > build/RELEASE_NOTES.md
+          ## Custom Android LLVM/Clang — ${REV}
+
+          - **Git Tag:** \`${TAG}\`
+          - **Host Environment:** Linux ARM64 (\`aarch64\`) / Android Bionic
+          - **Supported Target Architectures:** \`aarch64-linux-android\` (ARM64), \`arm-linux-androideabi\` (ARM32), \`x86_64-linux-android\`, \`i686-linux-android\`, \`riscv64-linux-android\`
+
+          ### Checksums
+          \`\`\`
+          $(cat build/artifacts/SHA256SUMS 2>/dev/null || true)
+          \`\`\`
+          EOF
+
       - name: Upload Artifact to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "LLVM ${{ steps.meta.outputs.revision }} (Linux ARM64 / Bionic)"
+          body_path: build/RELEASE_NOTES.md
           files: |
             build/artifacts/custom-llvm-*.tar.xz
             build/artifacts/*.sha256

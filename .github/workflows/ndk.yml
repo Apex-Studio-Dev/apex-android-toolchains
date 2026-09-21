@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: "Android NDK Release version"
+        description: "Android NDK Release version (or 'all' for full matrix)"
         required: true
         default: "r26d"
         type: choice
         options:
+          - "all"
           - "r26"
           - "r26b"
           - "r26c"
@@ -44,9 +45,48 @@ permissions:
   packages: read
 
 jobs:
-  build-ndk:
-    name: Build NDK ${{ inputs.release || github.ref_name }}
+  matrix-init:
+    name: Initialize NDK Build Matrix
     runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      platform: ${{ steps.set-matrix.outputs.platform }}
+      rebuild_llvm: ${{ steps.set-matrix.outputs.rebuild_llvm }}
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Compute Matrix
+        id: set-matrix
+        run: |
+          PLATFORM="${{ inputs.platform || 'bionic' }}"
+          REBUILD="${{ inputs.rebuild_llvm || false }}"
+          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+          echo "rebuild_llvm=$REBUILD" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+            REL="${TAG#ndk-}"
+            echo "matrix=[\"$REL\"]" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.release }}" = "all" ]; then
+            RELS=$(python3 -c "
+          import yaml, json
+          with open('metadata/ndk-releases.yaml') as f:
+              data = yaml.safe_load(f)
+          print(json.dumps([x['release'] for x in data['releases']]))
+          ")
+            echo "matrix=$RELS" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=[\"${{ inputs.release }}\"]" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-ndk:
+    name: Build NDK ${{ matrix.release }}
+    needs: matrix-init
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ${{ fromJson(needs.matrix-init.outputs.matrix) }}
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
@@ -92,15 +132,10 @@ jobs:
       - name: Determine Release and Tag
         id: meta
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            TAG="${{ github.ref_name }}"
-            REL="${TAG#ndk-}"
-          else
-            REL="${{ inputs.release }}"
-            TAG="ndk-$REL"
-          fi
-          PLATFORM="${{ inputs.platform || 'bionic' }}"
-          REBUILD="${{ inputs.rebuild_llvm || false }}"
+          REL="${{ matrix.release }}"
+          TAG="ndk-$REL"
+          PLATFORM="${{ needs.matrix-init.outputs.platform }}"
+          REBUILD="${{ needs.matrix-init.outputs.rebuild_llvm }}"
           echo "release=$REL" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
@@ -112,7 +147,9 @@ jobs:
           OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           IMAGE="ghcr.io/${OWNER}/apex-toolchains-builder:latest"
           echo "BUILDER_IMAGE=$IMAGE" >> "$GITHUB_ENV"
-          if ! docker pull "$IMAGE"; then
+          if docker pull "$IMAGE"; then
+            echo "Successfully pulled $IMAGE from GHCR."
+          else
             echo "GHCR image not found or inaccessible; building locally from docker/Dockerfile..."
             docker build -t "$IMAGE" -f docker/Dockerfile docker/
           fi
@@ -144,12 +181,32 @@ jobs:
               --ndk="$NDK_DIR" \
               --release="${{ steps.meta.outputs.release }}"
 
+      - name: Generate Release Notes
+        run: |
+          REL="${{ steps.meta.outputs.release }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+          mkdir -p build
+          cat <<EOF > build/RELEASE_NOTES.md
+          ## Custom Android NDK — ${REL}
+
+          - **Git Tag:** \`${TAG}\`
+          - **Host Environment:** Linux ARM64 (\`aarch64\`) / Android Bionic
+          - **Supported Target Architectures:** \`aarch64-linux-android\` (ARM64), \`arm-linux-androideabi\` (ARM32), \`x86_64-linux-android\`, \`i686-linux-android\`
+          - **Host Tools:** Native ARM64 GNU Make 4.4, Native ARM64 Yasm 1.3.0
+
+          ### Checksums
+          \`\`\`
+          $(cat build/artifacts/SHA256SUMS 2>/dev/null || true)
+          \`\`\`
+          EOF
+
       - name: Upload Artifact to GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "Custom Android NDK ${{ steps.meta.outputs.release }} (Linux ARM64 / Bionic)"
+          body_path: build/RELEASE_NOTES.md
           files: |
             build/artifacts/custom-android-ndk-*.tar.xz
             build/artifacts/*.sha256

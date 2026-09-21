@@ -140,6 +140,40 @@ else
     )
 fi
 
+# Detect cross-compilation if build host is not aarch64
+if [ "$(uname -m)" != "aarch64" ]; then
+    log "Host machine is $(uname -m), configuring cross-compilation for aarch64..."
+    CMAKE_EXTRA_FLAGS+=(
+        "-DCMAKE_SYSTEM_NAME=Linux"
+        "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
+    )
+    if command -v aarch64-linux-gnu-gcc >/dev/null; then
+        CMAKE_EXTRA_FLAGS+=(
+            "-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc"
+            "-DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++"
+        )
+    fi
+fi
+
+# Enable ccache if available
+if command -v ccache >/dev/null; then
+    log "ccache detected, enabling compiler caching..."
+    CMAKE_EXTRA_FLAGS+=(
+        "-DLLVM_CCACHE_BUILD=ON"
+        "-DCMAKE_C_COMPILER_LAUNCHER=ccache"
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+    )
+fi
+
+# RAM & Linker Optimization (Prevent Runner OOM)
+CMAKE_EXTRA_FLAGS+=(
+    "-DLLVM_PARALLEL_COMPILE_JOBS=$JOBS"
+    "-DLLVM_PARALLEL_LINK_JOBS=1"
+)
+if command -v ld.lld >/dev/null; then
+    CMAKE_EXTRA_FLAGS+=( "-DLLVM_USE_LINKER=lld" )
+fi
+
 cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
@@ -168,9 +202,15 @@ cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
 log "Compiling LLVM ($REVISION_CLEAN) with $JOBS jobs..."
 cmake --build "$BUILD_DIR" -j "$JOBS" --target install
 
-# 5. Strip binaries
+# 5. Strip binaries safely across architectures
 log "Stripping installed binaries..."
-find "$INSTALL_DIR/bin" -type f -exec strip --strip-unneeded {} + 2>/dev/null || true
+STRIP_BIN="strip"
+if [ -f "$INSTALL_DIR/bin/llvm-strip" ]; then
+    STRIP_BIN="$INSTALL_DIR/bin/llvm-strip"
+elif command -v aarch64-linux-gnu-strip >/dev/null; then
+    STRIP_BIN="aarch64-linux-gnu-strip"
+fi
+find "$INSTALL_DIR/bin" -type f -exec "$STRIP_BIN" --strip-unneeded {} + 2>/dev/null || true
 
 # 6. Verification
 if [ "$VERIFY_AFTER_BUILD" = true ]; then

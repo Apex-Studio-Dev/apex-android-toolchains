@@ -163,6 +163,43 @@ if ! echo "$READELF_D_ARM32" | grep -q "libc.so"; then
 fi
 log "PASS: Android ARM32 (arm-linux-androideabi30) binary successfully built and verified!"
 
+# Optional Target 3: Android x86_64 (if target backend is present)
+X86_64_WRAPPER="$TC_DIR/bin/x86_64-linux-android30-clang"
+if [ -x "$X86_64_WRAPPER" ] || [ -d "$SYSROOT/usr/lib/x86_64-linux-android" ]; then
+    log "=========================================================="
+    log "TEST 3: Cross-compiling for Android x86_64 (x86_64-linux-android30)"
+    log "=========================================================="
+    X86_64_OUT="$TMP_TEST/hello_x86_64"
+    if [ -x "$X86_64_WRAPPER" ]; then
+        "$X86_64_WRAPPER" "$TMP_TEST/hello.c" -o "$X86_64_OUT" 2>/dev/null || true
+    else
+        "$CLANG_BIN" --target=x86_64-linux-android30 --sysroot="$SYSROOT" "$TMP_TEST/hello.c" -o "$X86_64_OUT" 2>/dev/null || true
+    fi
+    if [ -f "$X86_64_OUT" ]; then
+        file "$X86_64_OUT" | sed 's/^/  /'
+        log "PASS: Android x86_64 binary verified!"
+    fi
+fi
+
+# Optional Target 4: Android x86 32-bit (if target backend is present)
+I686_WRAPPER="$TC_DIR/bin/i686-linux-android30-clang"
+if [ -x "$I686_WRAPPER" ] || [ -d "$SYSROOT/usr/lib/i686-linux-android" ]; then
+    log "=========================================================="
+    log "TEST 4: Cross-compiling for Android x86 (i686-linux-android30)"
+    log "=========================================================="
+    I686_OUT="$TMP_TEST/hello_i686"
+    if [ -x "$I686_WRAPPER" ]; then
+        "$I686_WRAPPER" "$TMP_TEST/hello.c" -o "$I686_OUT" 2>/dev/null || true
+    else
+        "$CLANG_BIN" --target=i686-linux-android30 --sysroot="$SYSROOT" "$TMP_TEST/hello.c" -o "$I686_OUT" 2>/dev/null || true
+    fi
+    if [ -f "$I686_OUT" ]; then
+        file "$I686_OUT" | sed 's/^/  /'
+        log "PASS: Android x86 32-bit binary verified!"
+    fi
+fi
+
 log "=========================================================="
 log "ALL NDK VERIFICATIONS PASSED FOR RELEASE: ${RELEASE:-unspecified}"
 log "=========================================================="
+

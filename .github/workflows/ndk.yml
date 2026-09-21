@@ -207,7 +207,8 @@ jobs:
             "$BUILDER_IMAGE" \
             scripts/verify-ndk.sh \
               --ndk="$NDK_DIR" \
-              --release="${{ steps.meta.outputs.release }}"
+              --release="${{ steps.meta.outputs.release }}" \
+              --target="${{ steps.meta.outputs.target }}"
 
       - name: Generate Release Notes
         run: |

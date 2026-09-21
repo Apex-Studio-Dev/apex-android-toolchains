@@ -24,10 +24,13 @@ Usage: $0 --ndk=<ndk_root> [options]
 Options:
   --ndk=<path>         Path to assembled Android NDK root
   --release=<name>     Release version (e.g. r26d)
+  --target=<triple>    Host target triple (default: aarch64-linux-android)
   -h, --help           Show this help message
 EOF
     exit 1
 }
+
+TARGET="${TARGET:-aarch64-linux-android}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -35,6 +38,8 @@ while [ $# -gt 0 ]; do
         --ndk) shift; NDK_DIR="$1" ;;
         --release=*) RELEASE="${1#*=}" ;;
         --release) shift; RELEASE="$1" ;;
+        --target=*) TARGET="${1#*=}" ;;
+        --target) shift; TARGET="$1" ;;
         -h|--help) usage ;;
         *) err "Unknown option: $1"; usage ;;
     esac
@@ -44,9 +49,18 @@ done
 [ -n "$NDK_DIR" ] || { err "NDK directory is required (--ndk=<path>)"; usage; }
 [ -d "$NDK_DIR" ] || { err "NDK directory $NDK_DIR does not exist"; exit 1; }
 
+# Determine expected host tag by target triple
+case "$TARGET" in
+    aarch64*|arm64*|linux-arm64) HOST_TAG="linux-arm64" ;;
+    arm*|linux-arm)              HOST_TAG="linux-arm" ;;
+    x86_64*|amd64*|linux-x86_64) HOST_TAG="linux-x86_64" ;;
+    i*86*|x86*|linux-x86)        HOST_TAG="linux-x86" ;;
+    *)                           HOST_TAG="linux-arm64" ;;
+esac
+
 # Locate LLVM toolchain directory
 TC_DIR=""
-for tag in "linux-arm64" "linux-aarch64" "linux-x86_64"; do
+for tag in "$HOST_TAG" "linux-arm64" "linux-aarch64" "linux-arm" "linux-x86_64" "linux-x86"; do
     if [ -d "$NDK_DIR/toolchains/llvm/prebuilt/$tag/bin" ]; then
         TC_DIR="$NDK_DIR/toolchains/llvm/prebuilt/$tag"
         break
@@ -54,7 +68,7 @@ for tag in "linux-arm64" "linux-aarch64" "linux-x86_64"; do
 done
 
 [ -n "$TC_DIR" ] || { err "Could not find llvm toolchain in $NDK_DIR/toolchains/llvm/prebuilt"; exit 1; }
-log "Using toolchain directory: $TC_DIR"
+log "Using toolchain directory: $TC_DIR (Host Tag: $HOST_TAG, Target: $TARGET)"
 
 SYSROOT="$TC_DIR/sysroot"
 [ -d "$SYSROOT" ] || { err "Sysroot directory missing at $SYSROOT"; exit 1; }

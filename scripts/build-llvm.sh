@@ -212,11 +212,21 @@ if command -v ld.lld >/dev/null; then
     CMAKE_EXTRA_FLAGS+=( "-DLLVM_USE_LINKER=lld" )
 fi
 
+# Determine enabled LLVM projects:
+# clang, lld, clang-tools-extra, polly across all architectures.
+# bolt is supported on 64-bit ELF architectures (AArch64, X86-64).
+DEFAULT_PROJECTS="clang;lld;clang-tools-extra;polly"
+if [ "$TARGET_ARCH" = "AArch64" ] || { [ "$TARGET_ARCH" = "X86" ] && [ "$TARGET_PROC" = "x86_64" ]; }; then
+    DEFAULT_PROJECTS="$DEFAULT_PROJECTS;bolt"
+fi
+LLVM_PROJECTS="${LLVM_PROJECTS:-$DEFAULT_PROJECTS}"
+log "Enabled LLVM projects: $LLVM_PROJECTS"
+
 cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
     -DLLVM_TARGETS_TO_BUILD="${LLVM_TARGETS:-AArch64;ARM;X86;RISCV}" \
-    -DLLVM_ENABLE_PROJECTS="clang;lld" \
+    -DLLVM_ENABLE_PROJECTS="$LLVM_PROJECTS" \
     -DLLVM_BUILD_TOOLS=ON \
     -DLLVM_INCLUDE_TESTS=OFF \
     -DLLVM_BUILD_TESTS=OFF \

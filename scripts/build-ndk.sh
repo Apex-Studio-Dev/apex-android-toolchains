@@ -320,7 +320,7 @@ find "$NDK_TOOLCHAIN/bin" -type f | while IFS= read -r file; do
 done
 
 # Copy any additional binaries from host LLVM
-for bin in clang clang++ ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-ranlib llvm-readelf llvm-strip; do
+for bin in clang clang++ ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-ranlib llvm-readelf llvm-strip clang-format clang-tidy clangd llvm-bolt; do
     if [ -f "$HOST_LLVM_DIR/bin/$bin" ]; then
         cp -f "$HOST_LLVM_DIR/bin/$bin" "$NDK_TOOLCHAIN/bin/$bin"
     fi

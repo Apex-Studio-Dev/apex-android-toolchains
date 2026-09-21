@@ -24,12 +24,15 @@ Usage: $0 --ndk=<ndk_dir> --release=<version> [options]
 
 Options:
   --ndk=<path>         Path to assembled Android NDK root
-  --release=<ver>      NDK release (e.g. r26d)
+  --release=<name>     Release version (e.g. r26d)
+  --target=<triple>    Host target triple (default: aarch64-linux-android)
   --out-dir=<path>     Output directory for artifact (default: build/artifacts)
   -h, --help           Show this help message
 EOF
     exit 1
 }
+
+TARGET="${TARGET:-aarch64-linux-android}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -37,6 +40,8 @@ while [ $# -gt 0 ]; do
         --ndk) shift; NDK_DIR="$1" ;;
         --release=*) RELEASE="${1#*=}" ;;
         --release) shift; RELEASE="$1" ;;
+        --target=*) TARGET="${1#*=}" ;;
+        --target) shift; TARGET="$1" ;;
         --out-dir=*) OUT_DIR="${1#*=}" ;;
         --out-dir) shift; OUT_DIR="$1" ;;
         -h|--help) usage ;;
@@ -51,8 +56,7 @@ done
 RELEASE_CLEAN="${RELEASE#ndk-}"
 mkdir -p "$OUT_DIR"
 
-# Target artifact filename strictly matching prompt requirement
-ARTIFACT_NAME="custom-android-ndk-${RELEASE_CLEAN}-linux-arm64.tar.xz"
+ARTIFACT_NAME="custom-android-ndk-${RELEASE_CLEAN}-${TARGET}.tar.xz"
 OUT_TAR="$OUT_DIR/$ARTIFACT_NAME"
 
 log "Packaging $NDK_DIR into $OUT_TAR..."
@@ -76,6 +80,10 @@ log "Computing cryptographic checksums (SHA256 & SHA512)..."
     sha512sum "$ARTIFACT_NAME" >> SHA512SUMS
     sort -u -k2 SHA256SUMS -o SHA256SUMS
     sort -u -k2 SHA512SUMS -o SHA512SUMS
+
+    if [ "$TARGET" = "aarch64-linux-android" ] || [ "$TARGET" = "linux-arm64" ]; then
+        ln -sf "$ARTIFACT_NAME" "custom-android-ndk-${RELEASE_CLEAN}-linux-arm64.tar.xz" 2>/dev/null || true
+    fi
 )
 
 log "Artifact generated: $OUT_TAR"

@@ -32,6 +32,8 @@ Usage: $0 --release=<version> [options]
 
 Options:
   --release=<ver>      NDK release (e.g. r26d, r27b, r28c, r29, r30)
+  --target=<triple>    Host execution target (default: aarch64-linux-android)
+                       [aarch64-linux-android | armv7a-linux-androideabi | x86_64-linux-android | i686-linux-android]
   --platform=<plat>    Host execution platform: bionic (default) | linux
   --rebuild-llvm       Force local compilation of LLVM from source
   --jobs=<N>           Build parallelism (default: $JOBS)
@@ -42,10 +44,14 @@ EOF
     exit 1
 }
 
+TARGET="${TARGET:-aarch64-linux-android}"
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --release=*) RELEASE="${1#*=}" ;;
         --release) shift; RELEASE="$1" ;;
+        --target=*) TARGET="${1#*=}" ;;
+        --target) shift; TARGET="$1" ;;
         --platform=*) PLATFORM="${1#*=}" ;;
         --platform) shift; PLATFORM="$1" ;;
         --rebuild-llvm) REBUILD_LLVM=true ;;
@@ -61,15 +67,49 @@ done
 
 [ -n "$RELEASE" ] || { err "Release is required (--release=<version>)"; usage; }
 
+# Canonicalize target architecture
+case "$TARGET" in
+    aarch64*|arm64*|linux-arm64)
+        TARGET_CANONICAL="aarch64-linux-android"
+        TARGET_ARCH="arm64"
+        HOST_TAG="linux-arm64"
+        ZIG_TARGET="aarch64-linux-musl"
+        ;;
+    arm*|linux-arm)
+        TARGET_CANONICAL="armv7a-linux-androideabi"
+        TARGET_ARCH="arm"
+        HOST_TAG="linux-arm"
+        ZIG_TARGET="arm-linux-musleabihf"
+        ;;
+    x86_64*|amd64*|linux-x86_64)
+        TARGET_CANONICAL="x86_64-linux-android"
+        TARGET_ARCH="x86_64"
+        HOST_TAG="linux-x86_64"
+        ZIG_TARGET="x86_64-linux-musl"
+        ;;
+    i*86*|x86*|linux-x86)
+        TARGET_CANONICAL="i686-linux-android"
+        TARGET_ARCH="x86"
+        HOST_TAG="linux-x86"
+        ZIG_TARGET="x86-linux-musl"
+        ;;
+    *)
+        TARGET_CANONICAL="$TARGET"
+        TARGET_ARCH="arm64"
+        HOST_TAG="linux-arm64"
+        ZIG_TARGET="aarch64-linux-musl"
+        ;;
+esac
+
 # Normalize release: strip ndk- prefix if passed
 RELEASE_CLEAN="${RELEASE#ndk-}"
 RELEASE_NUM="${RELEASE_CLEAN%%[a-z]*}"
 RELEASE_REV="${RELEASE_CLEAN#"$RELEASE_NUM"}"
 
-WORK_DIR="$ROOT_DIR/build/ndk-$RELEASE_CLEAN"
+WORK_DIR="$ROOT_DIR/build/ndk-$RELEASE_CLEAN-$TARGET_CANONICAL"
 mkdir -p "$WORK_DIR" "$ROOT_DIR/build/artifacts"
 
-log "Target NDK: $RELEASE_CLEAN (Platform: $PLATFORM, Architecture: aarch64)"
+log "Target NDK: $RELEASE_CLEAN (Host Target: $TARGET_CANONICAL, Host Tag: $HOST_TAG, Platform: $PLATFORM)"
 
 # 1. Query metadata for required LLVM revision and official base
 META="$(python3 -c "
@@ -87,24 +127,27 @@ if [ -z "$META" ]; then
     exit 1
 fi
 
-IFS='|' read -r REQUIRED_LLVM LLVM_ARTIFACT OFFICIAL_ARCHIVE OFFICIAL_URL <<< "$META"
-log "Requirements: LLVM revision $REQUIRED_LLVM (Artifact: $LLVM_ARTIFACT)"
+IFS='|' read -r REQUIRED_LLVM LLVM_ARTIFACT_DEFAULT OFFICIAL_ARCHIVE OFFICIAL_URL <<< "$META"
+log "Requirements: LLVM revision $REQUIRED_LLVM (Target: $TARGET_CANONICAL)"
 
-# 2. Obtain LLVM artifact (Strict dependency model)
-LLVM_TAR="$ROOT_DIR/build/artifacts/$LLVM_ARTIFACT"
+# 2. Obtain LLVM artifact for this host target
+LLVM_TAR="$ROOT_DIR/build/artifacts/custom-llvm-${REQUIRED_LLVM#clang-}-${TARGET_CANONICAL}.tar.xz"
+if [ ! -f "$LLVM_TAR" ] && [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
+    LLVM_TAR="$ROOT_DIR/build/artifacts/custom-llvm-${REQUIRED_LLVM#clang-}-linux-arm64.tar.xz"
+fi
 HOST_LLVM_DIR="$WORK_DIR/llvm-host"
 
 if [ "$REBUILD_LLVM" = true ]; then
-    log "Rebuild flag specified (--rebuild-llvm). Compiling LLVM $REQUIRED_LLVM from source..."
-    "$SCRIPT_DIR/build-llvm.sh" --revision="$REQUIRED_LLVM" --platform="$PLATFORM" --jobs="$JOBS"
+    log "Rebuild flag specified (--rebuild-llvm). Compiling LLVM $REQUIRED_LLVM for $TARGET_CANONICAL..."
+    "$SCRIPT_DIR/build-llvm.sh" --revision="$REQUIRED_LLVM" --target="$TARGET_CANONICAL" --platform="$PLATFORM" --jobs="$JOBS"
 fi
 
 if [ ! -f "$LLVM_TAR" ]; then
-    log "LLVM artifact not found locally. Fetching pre-released artifact..."
+    log "LLVM artifact not found locally. Fetching pre-released artifact for $TARGET_CANONICAL..."
     if ! "$SCRIPT_DIR/fetch-llvm.sh" --revision="$REQUIRED_LLVM" --artifact-only --platform="$PLATFORM"; then
         if [ "$REBUILD_LLVM" = false ]; then
             warn "LLVM artifact not found in releases. Falling back to build-llvm.sh..."
-            "$SCRIPT_DIR/build-llvm.sh" --revision="$REQUIRED_LLVM" --platform="$PLATFORM" --jobs="$JOBS"
+            "$SCRIPT_DIR/build-llvm.sh" --revision="$REQUIRED_LLVM" --target="$TARGET_CANONICAL" --platform="$PLATFORM" --jobs="$JOBS"
         fi
     fi
 fi
@@ -200,38 +243,40 @@ if [ ! -f "$HOST_TOOLS_DIR/bin/yasm" ]; then
         fetch_source "$YASM_TAR" "https://www.tortall.net/projects/yasm/releases/yasm-1.3.0.tar.gz" || true
     fi
     if [ -f "$YASM_TAR" ]; then
-        log "Compiling native yasm 1.3.0 for ARM64..."
+        log "Compiling native yasm 1.3.0 for $TARGET_CANONICAL..."
         (
             cd "$WORK_DIR"
             rm -rf yasm-1.3.0
             tar -xzf "$YASM_TAR"
             cd yasm-1.3.0
             CONF_ARGS=( --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC" )
-            if [ "$(uname -m)" != "aarch64" ]; then
-                if command -v aarch64-linux-gnu-gcc >/dev/null; then
-                    CONF_ARGS+=( --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc )
-                elif command -v zig >/dev/null; then
-                    CONF_ARGS+=( --host=aarch64-linux-musl CC="zig cc -target aarch64-linux-musl" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
-                fi
+            if command -v zig >/dev/null; then
+                CONF_ARGS+=( --host="$TARGET_CANONICAL" CC="zig cc -target $ZIG_TARGET" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
+            elif [ "$(uname -m)" != "$TARGET_ARCH" ]; then
+                case "$TARGET_ARCH" in
+                    arm64) command -v aarch64-linux-gnu-gcc >/dev/null && CONF_ARGS+=( --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc ) ;;
+                    arm)   command -v arm-linux-gnueabihf-gcc >/dev/null && CONF_ARGS+=( --host=arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc ) ;;
+                    x86)   command -v i686-linux-gnu-gcc >/dev/null && CONF_ARGS+=( --host=i686-linux-gnu CC=i686-linux-gnu-gcc ) ;;
+                esac
             fi
             ./configure "${CONF_ARGS[@]}"
             make -j"$JOBS"
             make install
         )
-    elif [ "$(uname -m)" = "aarch64" ] && command -v yasm >/dev/null; then
+    elif [ "$(uname -m)" = "$TARGET_ARCH" ] && command -v yasm >/dev/null; then
         cp "$(command -v yasm)" "$HOST_TOOLS_DIR/bin/yasm"
     fi
 fi
 
-# 5. Splice ARM64 LLVM into official NDK
-log "Splicing native Linux ARM64 LLVM into NDK..."
+# 5. Splice LLVM into official NDK
+log "Splicing native $TARGET_CANONICAL LLVM into NDK..."
 
 # Strip debugger wrappers not applicable to host
 rm -f "$NDK_ROOT"/ndk-lldb "$NDK_ROOT"/ndk-lldb.cmd "$NDK_ROOT"/ndk-gdb "$NDK_ROOT"/ndk-gdb.cmd
 rm -f "$PREBUILT_BIN"/ndk-gdb "$PREBUILT_BIN"/ndk-gdb.cmd "$PREBUILT_BIN"/ndkgdb.pyz 2>/dev/null || true
 rm -f "$NDK_TOOLCHAIN/bin"/*lldb* 2>/dev/null || true
 
-# Replace ELF tools with our ARM64 ones
+# Replace ELF tools with our host LLVM ones
 find "$NDK_TOOLCHAIN/bin" -type f | while IFS= read -r file; do
     bname="$(basename "$file")"
     if [ -f "$HOST_LLVM_DIR/bin/$bname" ] && file "$file" | grep -q 'ELF'; then
@@ -269,7 +314,7 @@ if [ -d "$HOST_LLVM_DIR/lib/clang" ]; then
 fi
 
 # 6. Adjust host directory layout and CMake toolchains
-log "Patching host tag and CMake toolchains for ARM64/Bionic..."
+log "Patching host tag and CMake toolchains for $TARGET_CANONICAL..."
 
 # Normalize HOST_ARCH in ndk_bin_common.sh
 if [ -f "$NDK_ROOT/build/tools/ndk_bin_common.sh" ]; then
@@ -286,17 +331,17 @@ fi
 # Patch cmake toolchain files
 for tc in "$NDK_ROOT/build/cmake/android.toolchain.cmake" "$NDK_ROOT/build/cmake/android-legacy.toolchain.cmake"; do
     if [ -f "$tc" ]; then
-        sed -i -E 's/linux-x86_64/linux-arm64/g' "$tc" 2>/dev/null || true
+        sed -i -E "s/linux-x86_64/$HOST_TAG/g" "$tc" 2>/dev/null || true
     fi
 done
 
-# Rename prebuilts directory to linux-arm64 with fallback symlinks
+# Rename prebuilts directory to host tag with fallback symlinks
 for dir_prefix in "prebuilt" "toolchains/llvm/prebuilt" "shader-tools"; do
     target_path="$NDK_ROOT/$dir_prefix"
-    if [ -d "$target_path/linux-x86_64" ]; then
-        mv "$target_path/linux-x86_64" "$target_path/linux-arm64"
-        ( cd "$target_path" && ln -s "linux-arm64" "linux-x86_64" )
-        ( cd "$target_path" && ln -s "linux-arm64" "linux-aarch64" )
+    if [ -d "$target_path/linux-x86_64" ] && [ "$HOST_TAG" != "linux-x86_64" ]; then
+        mv "$target_path/linux-x86_64" "$target_path/$HOST_TAG"
+        ( cd "$target_path" && ln -sf "$HOST_TAG" "linux-x86_64" )
+        ( cd "$target_path" && ln -sf "$HOST_TAG" "linux-aarch64" )
     fi
 done
 
@@ -311,7 +356,7 @@ fi
 # 8. Package
 if [ "$PACKAGE_AFTER_BUILD" = true ]; then
     log "Packaging Custom NDK..."
-    "$SCRIPT_DIR/package-ndk.sh" --ndk="$NDK_ROOT" --release="$RELEASE_CLEAN"
+    "$SCRIPT_DIR/package-ndk.sh" --ndk="$NDK_ROOT" --release="$RELEASE_CLEAN" --target="$TARGET_CANONICAL"
 fi
 
-log "Custom Android NDK $RELEASE_CLEAN build process completed successfully!"
+log "Custom Android NDK $RELEASE_CLEAN ($TARGET_CANONICAL) build process completed successfully!"

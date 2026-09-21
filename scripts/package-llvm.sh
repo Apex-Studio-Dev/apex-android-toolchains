@@ -25,11 +25,14 @@ Usage: $0 --dir=<llvm_dir> --revision=<rev> [options]
 Options:
   --dir=<path>         Path to LLVM installation prefix
   --revision=<name>    LLVM revision (e.g. clang-r487747e)
+  --target=<triple>    Host target triple (default: aarch64-linux-android)
   --out-dir=<path>     Output directory for artifact (default: build/artifacts)
   -h, --help           Show this help message
 EOF
     exit 1
 }
+
+TARGET="${TARGET:-aarch64-linux-android}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -37,6 +40,8 @@ while [ $# -gt 0 ]; do
         --dir) shift; LLVM_DIR="$1" ;;
         --revision=*) REVISION="${1#*=}" ;;
         --revision) shift; REVISION="$1" ;;
+        --target=*) TARGET="${1#*=}" ;;
+        --target) shift; TARGET="$1" ;;
         --out-dir=*) OUT_DIR="${1#*=}" ;;
         --out-dir) shift; OUT_DIR="$1" ;;
         -h|--help) usage ;;
@@ -53,8 +58,7 @@ REVISION_CLEAN="${REVISION#llvm-}"
 
 mkdir -p "$OUT_DIR"
 
-# Target artifact filename strictly matching prompt requirement
-ARTIFACT_NAME="custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz"
+ARTIFACT_NAME="custom-llvm-${REVISION_CLEAN#clang-}-${TARGET}.tar.xz"
 OUT_TAR="$OUT_DIR/$ARTIFACT_NAME"
 
 log "Packaging $LLVM_DIR into $OUT_TAR..."
@@ -80,6 +84,10 @@ log "Computing cryptographic checksums (SHA256 & SHA512)..."
     # Sort and deduplicate
     sort -u -k2 SHA256SUMS -o SHA256SUMS
     sort -u -k2 SHA512SUMS -o SHA512SUMS
+
+    if [ "$TARGET" = "aarch64-linux-android" ] || [ "$TARGET" = "linux-arm64" ]; then
+        ln -sf "$ARTIFACT_NAME" "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" 2>/dev/null || true
+    fi
 )
 
 log "Artifact generated: $OUT_TAR"

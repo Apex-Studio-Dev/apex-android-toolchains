@@ -14,7 +14,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 METADATA_FILE="$ROOT_DIR/metadata/llvm-releases.yaml"
 
 REVISION=""
-PLATFORM="${PLATFORM:-bionic}"    # bionic | linux
+TARGET="${TARGET:-aarch64-linux-android}"  # aarch64-linux-android | armv7a-linux-androideabi | x86_64-linux-android | i686-linux-android
+PLATFORM="${PLATFORM:-bionic}"            # bionic | linux
 BUILD_DIR=""
 INSTALL_DIR=""
 JOBS="$(nproc 2>/dev/null || echo 4)"
@@ -32,6 +33,8 @@ Usage: $0 --revision=<name> [options]
 
 Options:
   --revision=<name>    LLVM revision to build (e.g. clang-r487747e)
+  --target=<triple>    Host execution target (default: aarch64-linux-android)
+                       [aarch64-linux-android | armv7a-linux-androideabi | x86_64-linux-android | i686-linux-android]
   --platform=<plat>    Target execution environment: bionic (default) | linux
   --jobs=<N>           Build parallelism (default: $JOBS)
   --build-dir=<dir>    Scratch directory for compilation
@@ -47,6 +50,8 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --revision=*) REVISION="${1#*=}" ;;
         --revision) shift; REVISION="$1" ;;
+        --target=*) TARGET="${1#*=}" ;;
+        --target) shift; TARGET="$1" ;;
         --platform=*) PLATFORM="${1#*=}" ;;
         --platform) shift; PLATFORM="$1" ;;
         --jobs=*) JOBS="${1#*=}" ;;
@@ -65,16 +70,55 @@ done
 
 [ -n "$REVISION" ] || { err "Revision is required (--revision=<name>)"; usage; }
 
+# Canonicalize target architecture
+case "$TARGET" in
+    aarch64-linux-android|aarch64|arm64|linux-arm64)
+        TARGET_CANONICAL="aarch64-linux-android"
+        TARGET_ARCH="AArch64"
+        TARGET_PROC="aarch64"
+        CROSS_GCC="aarch64-linux-gnu-gcc"
+        CROSS_GXX="aarch64-linux-gnu-g++"
+        ;;
+    arm-linux-androideabi|armv7a-linux-androideabi|arm|armv7a|linux-arm)
+        TARGET_CANONICAL="armv7a-linux-androideabi"
+        TARGET_ARCH="ARM"
+        TARGET_PROC="arm"
+        CROSS_GCC="arm-linux-gnueabihf-gcc"
+        CROSS_GXX="arm-linux-gnueabihf-g++"
+        ;;
+    x86_64-linux-android|x86_64|amd64|linux-x86_64)
+        TARGET_CANONICAL="x86_64-linux-android"
+        TARGET_ARCH="X86"
+        TARGET_PROC="x86_64"
+        CROSS_GCC="x86_64-linux-gnu-gcc"
+        CROSS_GXX="x86_64-linux-gnu-g++"
+        ;;
+    i686-linux-android|i686|x86|linux-x86)
+        TARGET_CANONICAL="i686-linux-android"
+        TARGET_ARCH="X86"
+        TARGET_PROC="i686"
+        CROSS_GCC="i686-linux-gnu-gcc"
+        CROSS_GXX="i686-linux-gnu-g++"
+        ;;
+    *)
+        TARGET_CANONICAL="$TARGET"
+        TARGET_ARCH="AArch64"
+        TARGET_PROC="aarch64"
+        CROSS_GCC="aarch64-linux-gnu-gcc"
+        CROSS_GXX="aarch64-linux-gnu-g++"
+        ;;
+esac
+
 # Normalize revision
 REVISION_CLEAN="${REVISION#llvm-}"
 [ "${REVISION_CLEAN#clang-}" = "$REVISION_CLEAN" ] && REVISION_CLEAN="clang-$REVISION_CLEAN"
 
-WORK_DIR="$ROOT_DIR/build/$REVISION_CLEAN"
+WORK_DIR="$ROOT_DIR/build/$REVISION_CLEAN-$TARGET_CANONICAL"
 BUILD_DIR="${BUILD_DIR:-$WORK_DIR/ninja-build}"
 INSTALL_DIR="${INSTALL_DIR:-$WORK_DIR/install}"
 mkdir -p "$BUILD_DIR" "$INSTALL_DIR"
 
-log "Configuring build for $REVISION_CLEAN (Platform: $PLATFORM, Arch: aarch64, Jobs: $JOBS)"
+log "Configuring build for $REVISION_CLEAN (Host Target: $TARGET_CANONICAL, Arch: $TARGET_ARCH, Jobs: $JOBS)"
 
 # 1. Fetch exact source code
 SRC_DIR="$WORK_DIR/source"
@@ -126,31 +170,25 @@ fi
 log "Running CMake configuration..."
 CMAKE_EXTRA_FLAGS=()
 
-# Host-specific compiler flags for Bionic / Linux ARM64
-if [ "$PLATFORM" = "bionic" ]; then
-    # Bionic target: static or android-compatible flags
-    CMAKE_EXTRA_FLAGS+=(
-        "-DLLVM_DEFAULT_TARGET_TRIPLE=aarch64-linux-android"
-        "-DCMAKE_C_FLAGS=-fPIC -Wno-unused-command-line-argument"
-        "-DCMAKE_CXX_FLAGS=-fPIC -Wno-unused-command-line-argument"
-    )
-else
-    CMAKE_EXTRA_FLAGS+=(
-        "-DLLVM_DEFAULT_TARGET_TRIPLE=aarch64-unknown-linux-gnu"
-    )
-fi
+# Host-specific compiler flags
+CMAKE_EXTRA_FLAGS+=(
+    "-DLLVM_DEFAULT_TARGET_TRIPLE=$TARGET_CANONICAL"
+    "-DCMAKE_C_FLAGS=-fPIC -Wno-unused-command-line-argument"
+    "-DCMAKE_CXX_FLAGS=-fPIC -Wno-unused-command-line-argument"
+)
 
-# Detect cross-compilation if build host is not aarch64
-if [ "$(uname -m)" != "aarch64" ]; then
-    log "Host machine is $(uname -m), configuring cross-compilation for aarch64..."
+# Detect cross-compilation if build host differs from target host
+BUILD_ARCH="$(uname -m)"
+if [ "$BUILD_ARCH" != "$TARGET_PROC" ]; then
+    log "Host machine is $BUILD_ARCH, cross-compiling for $TARGET_PROC ($TARGET_CANONICAL)..."
     CMAKE_EXTRA_FLAGS+=(
         "-DCMAKE_SYSTEM_NAME=Linux"
-        "-DCMAKE_SYSTEM_PROCESSOR=aarch64"
+        "-DCMAKE_SYSTEM_PROCESSOR=$TARGET_PROC"
     )
-    if command -v aarch64-linux-gnu-gcc >/dev/null; then
+    if command -v "$CROSS_GCC" >/dev/null; then
         CMAKE_EXTRA_FLAGS+=(
-            "-DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc"
-            "-DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++"
+            "-DCMAKE_C_COMPILER=$CROSS_GCC"
+            "-DCMAKE_CXX_COMPILER=$CROSS_GXX"
         )
     fi
 fi
@@ -192,14 +230,14 @@ cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
     -DLLVM_ENABLE_ZLIB=ON \
     -DLLVM_ENABLE_ZSTD=OFF \
     -DLLVM_ENABLE_THREADS=ON \
-    -DLLVM_TARGET_ARCH="AArch64" \
+    -DLLVM_TARGET_ARCH="$TARGET_ARCH" \
     -DCLANG_DEFAULT_LINKER=lld \
     -DCLANG_DEFAULT_OBJCOPY=llvm-objcopy \
     -DCLANG_VENDOR="Apex-Android ($REVISION_CLEAN)" \
     "${CMAKE_EXTRA_FLAGS[@]}"
 
 # 4. Build
-log "Compiling LLVM ($REVISION_CLEAN) with $JOBS jobs..."
+log "Compiling LLVM ($REVISION_CLEAN for $TARGET_CANONICAL) with $JOBS jobs..."
 cmake --build "$BUILD_DIR" -j "$JOBS" --target install
 
 # 5. Strip binaries safely across architectures
@@ -207,21 +245,21 @@ log "Stripping installed binaries..."
 STRIP_BIN="strip"
 if [ -f "$INSTALL_DIR/bin/llvm-strip" ]; then
     STRIP_BIN="$INSTALL_DIR/bin/llvm-strip"
-elif command -v aarch64-linux-gnu-strip >/dev/null; then
-    STRIP_BIN="aarch64-linux-gnu-strip"
+elif command -v "${TARGET_PROC}-linux-gnu-strip" >/dev/null; then
+    STRIP_BIN="${TARGET_PROC}-linux-gnu-strip"
 fi
 find "$INSTALL_DIR/bin" -type f -exec "$STRIP_BIN" --strip-unneeded {} + 2>/dev/null || true
 
 # 6. Verification
 if [ "$VERIFY_AFTER_BUILD" = true ]; then
     log "Verifying built LLVM..."
-    "$SCRIPT_DIR/verify-llvm.sh" --dir="$INSTALL_DIR" --revision="$REVISION_CLEAN"
+    "$SCRIPT_DIR/verify-llvm.sh" --dir="$INSTALL_DIR" --revision="$REVISION_CLEAN" --target="$TARGET_CANONICAL"
 fi
 
 # 7. Packaging
 if [ "$PACKAGE_AFTER_BUILD" = true ]; then
     log "Packaging LLVM artifact..."
-    "$SCRIPT_DIR/package-llvm.sh" --dir="$INSTALL_DIR" --revision="$REVISION_CLEAN"
+    "$SCRIPT_DIR/package-llvm.sh" --dir="$INSTALL_DIR" --revision="$REVISION_CLEAN" --target="$TARGET_CANONICAL"
 fi
 
 log "LLVM $REVISION_CLEAN build completed successfully!"

@@ -4,11 +4,22 @@ Monorepo for building **Custom Android LLVM/Clang** and **Custom Android NDK** w
 
 ---
 
-## 🎯 Target Architectures
+## 🎯 Architectures
 
-- **Host**: `Linux ARM64 / aarch64` (supports Android Bionic & Linux environments)
-- **Target 1**: `aarch64-linux-android` (Android ARM64, `arm64-v8a`)
-- **Target 2**: `arm-linux-androideabi` / `armeabi-v7a` (Android ARM32)
+### Host Execution Platforms (Where the toolchains run)
+Supports native execution on Android (Bionic / Termux) and Linux for **all 4 Android architectures**:
+1. `aarch64-linux-android` (Android ARM64 / `arm64-v8a`)
+2. `armv7a-linux-androideabi` (Android ARM32 / `armeabi-v7a`)
+3. `x86_64-linux-android` (Android x86_64 / Waydroid / WSA)
+4. `i686-linux-android` (Android x86 32-bit / Emulator)
+
+### Target Architectures (What the toolchains compile code for)
+Every single toolchain variant is a full **multi-target cross-compiler** capable of generating code for:
+- `arm64-v8a` (`aarch64-linux-android`)
+- `armeabi-v7a` (`arm-linux-androideabi`)
+- `x86_64` (`x86_64-linux-android`)
+- `x86` (`i686-linux-android`)
+- `riscv64` (`riscv64-linux-android`)
 
 ---
 

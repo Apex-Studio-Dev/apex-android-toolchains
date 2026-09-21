@@ -1,4 +1,4 @@
-name: Build LLVM/Clang (ARM64 / Bionic)
+name: Build LLVM/Clang (Multi-Architecture Android / Linux)
 
 on:
   workflow_dispatch:
@@ -22,6 +22,17 @@ on:
           - "clang-r530567e"
           - "clang-r563880c"
           - "clang-r574158c"
+      target:
+        description: "Host execution target architecture (or 'all' for all 4 archs)"
+        required: true
+        default: "aarch64-linux-android"
+        type: choice
+        options:
+          - "all"
+          - "aarch64-linux-android"
+          - "armv7a-linux-androideabi"
+          - "x86_64-linux-android"
+          - "i686-linux-android"
       platform:
         description: "Host execution platform"
         required: true
@@ -54,30 +65,45 @@ jobs:
         run: |
           PLATFORM="${{ inputs.platform || 'bionic' }}"
           echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" = "push" ]; then
-            TAG="${{ github.ref_name }}"
-            REV="clang-${TAG#llvm-}"
-            echo "matrix=[\"$REV\"]" >> "$GITHUB_OUTPUT"
-          elif [ "${{ inputs.revision }}" = "all" ]; then
-            REVS=$(python3 -c "
-          import yaml, json
+          python3 -c "
+          import yaml, json, os
+
+          event = os.environ.get('GITHUB_EVENT_NAME', '')
+          ref_name = os.environ.get('GITHUB_REF_NAME', '')
+          input_rev = '${{ inputs.revision }}'
+          input_target = '${{ inputs.target }}'
+
           with open('metadata/llvm-releases.yaml') as f:
               data = yaml.safe_load(f)
-          print(json.dumps([x['revision'] for x in data['releases']]))
-          ")
-            echo "matrix=$REVS" >> "$GITHUB_OUTPUT"
-          else
-            echo "matrix=[\"${{ inputs.revision }}\"]" >> "$GITHUB_OUTPUT"
-          fi
+          all_revs = [x['revision'] for x in data['releases']]
+          all_targets = ['aarch64-linux-android', 'armv7a-linux-androideabi', 'x86_64-linux-android', 'i686-linux-android']
+
+          if event == 'push' and ref_name.startswith('llvm-'):
+              revs = ['clang-' + ref_name[5:]]
+              targets = all_targets
+          elif input_rev == 'all':
+              revs = all_revs
+          else:
+              revs = [input_rev or 'clang-r487747e']
+
+          if input_target == 'all' or not input_target:
+              targets = all_targets
+          else:
+              targets = [input_target]
+
+          matrix = [{'revision': r, 'target': t} for r in revs for t in targets]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'matrix={json.dumps(matrix)}\n')
+          "
 
   build-llvm:
-    name: Build LLVM ${{ matrix.revision }}
+    name: Build LLVM ${{ matrix.revision }} (${{ matrix.target }})
     needs: matrix-init
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        revision: ${{ fromJson(needs.matrix-init.outputs.matrix) }}
+        include: ${{ fromJson(needs.matrix-init.outputs.matrix) }}
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@v10
@@ -114,8 +140,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /mnt/build/.ccache
-          key: llvm-ccache-${{ matrix.revision }}-${{ github.sha }}
+          key: llvm-ccache-${{ matrix.revision }}-${{ matrix.target }}-${{ github.sha }}
           restore-keys: |
+            llvm-ccache-${{ matrix.revision }}-${{ matrix.target }}-
             llvm-ccache-${{ matrix.revision }}-
             llvm-ccache-
 
@@ -135,10 +162,12 @@ jobs:
           REV="${{ matrix.revision }}"
           TAG="llvm-${REV#clang-}"
           PLATFORM="${{ needs.matrix-init.outputs.platform }}"
+          TARGET="${{ matrix.target }}"
           echo "revision=$REV" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
-          echo "Building revision: $REV with tag: $TAG (Platform: $PLATFORM)"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "Building revision: $REV ($TARGET) with tag: $TAG (Platform: $PLATFORM)"
 
       - name: Resolve Builder Docker Image
         run: |
@@ -163,6 +192,7 @@ jobs:
             "$BUILDER_IMAGE" \
             scripts/build-llvm.sh \
               --revision="${{ steps.meta.outputs.revision }}" \
+              --target="${{ steps.meta.outputs.target }}" \
               --platform="${{ steps.meta.outputs.platform }}" \
               --jobs="$(nproc)"
 
@@ -175,20 +205,22 @@ jobs:
             -e HOME=/work \
             "$BUILDER_IMAGE" \
             scripts/verify-llvm.sh \
-              --dir="build/${{ steps.meta.outputs.revision }}/install" \
-              --revision="${{ steps.meta.outputs.revision }}"
+              --dir="build/${{ steps.meta.outputs.revision }}-${{ steps.meta.outputs.target }}/install" \
+              --revision="${{ steps.meta.outputs.revision }}" \
+              --target="${{ steps.meta.outputs.target }}"
 
       - name: Generate Release Notes
         run: |
           REV="${{ steps.meta.outputs.revision }}"
           TAG="${{ steps.meta.outputs.tag }}"
+          TARGET="${{ steps.meta.outputs.target }}"
           mkdir -p build
           cat <<EOF > build/RELEASE_NOTES.md
-          ## Custom Android LLVM/Clang — ${REV}
+          ## Custom Android LLVM/Clang — ${REV} (${TARGET})
 
           - **Git Tag:** \`${TAG}\`
-          - **Host Environment:** Linux ARM64 (\`aarch64\`) / Android Bionic
-          - **Supported Target Architectures:** \`aarch64-linux-android\` (ARM64), \`arm-linux-androideabi\` (ARM32), \`x86_64-linux-android\`, \`i686-linux-android\`, \`riscv64-linux-android\`
+          - **Host Environment:** \`${TARGET}\` (Native execution on this Android/Linux architecture)
+          - **Multi-Arch Code Generation:** Capable of cross-compiling to \`arm64-v8a\`, \`armeabi-v7a\`, \`x86_64\`, \`x86\`, and \`riscv64\`.
 
           ### Checksums
           \`\`\`
@@ -201,7 +233,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: "LLVM ${{ steps.meta.outputs.revision }} (Linux ARM64 / Bionic)"
+          name: "LLVM ${{ steps.meta.outputs.revision }}"
           body_path: build/RELEASE_NOTES.md
           files: |
             build/artifacts/custom-llvm-*.tar.xz

@@ -208,9 +208,6 @@ CMAKE_EXTRA_FLAGS+=(
     "-DLLVM_PARALLEL_COMPILE_JOBS=$JOBS"
     "-DLLVM_PARALLEL_LINK_JOBS=1"
 )
-if command -v ld.lld >/dev/null; then
-    CMAKE_EXTRA_FLAGS+=( "-DLLVM_USE_LINKER=lld" )
-fi
 
 # Determine enabled LLVM projects:
 # clang, lld, clang-tools-extra, polly across all architectures.

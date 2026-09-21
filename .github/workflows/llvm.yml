@@ -113,9 +113,8 @@ jobs:
             /usr/share/dotnet \
             /usr/local/lib/android \
             /opt/ghc \
-            /opt/hostedtoolcache \
-            /var/lib/docker/image
-          sudo docker system prune -af || true
+            /opt/hostedtoolcache
+          sudo docker system prune -af --volumes || true
           echo "Disk space after cleanup:"
           df -h
 

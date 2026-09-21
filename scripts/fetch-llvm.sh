@@ -69,18 +69,50 @@ mkdir -p "$DEST_DIR"
 
 log "Target LLVM revision: $REVISION_CLEAN (tag: $TAG_NAME, platform: $PLATFORM)"
 
-# Extract commit metadata using python
+# Extract commit metadata using python (with built-in fallback if PyYAML is missing)
 extract_meta() {
     python3 -c "
-import yaml, sys
-with open('$METADATA_FILE') as f:
-    data = yaml.safe_load(f)
+import sys, os
+
+metadata_file = '$METADATA_FILE'
 rev = '$REVISION_CLEAN'
-entry = next((r for r in data.get('releases', []) if r['revision'] == rev), None)
-if not entry:
+
+def parse_with_yaml():
+    import yaml
+    with open(metadata_file) as f:
+        data = yaml.safe_load(f)
+    entry = next((r for r in data.get('releases', []) if r['revision'] == rev), None)
+    if entry:
+        return f\"{entry['llvm_version']}|{entry['llvm_project_commit']}|{entry['llvm_android_commit']}|{entry['artifact']}\"
+    return None
+
+def parse_fallback():
+    with open(metadata_file) as f:
+        content = f.read()
+    blocks = content.split('  - revision:')
+    for b in blocks[1:]:
+        lines = [line.strip() for line in b.splitlines()]
+        current_rev = lines[0].strip('\"\' ')
+        if current_rev == rev:
+            props = {}
+            for line in lines[1:]:
+                if ':' in line and not line.startswith('-'):
+                    k, v = line.split(':', 1)
+                    props[k.strip()] = v.strip('\"\' ')
+            return f\"{props.get('llvm_version')}|{props.get('llvm_project_commit')}|{props.get('llvm_android_commit')}|{props.get('artifact')}\"
+    return None
+
+res = None
+try:
+    res = parse_with_yaml()
+except Exception:
+    res = parse_fallback()
+
+if res:
+    print(res)
+else:
     sys.exit(1)
-print(f\"{entry['llvm_version']}|{entry['llvm_project_commit']}|{entry['llvm_android_commit']}|{entry['artifact']}\")
-" 2>/dev/null || true
+"
 }
 
 META="$(extract_meta)"

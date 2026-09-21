@@ -113,14 +113,47 @@ log "Target NDK: $RELEASE_CLEAN (Host Target: $TARGET_CANONICAL, Host Tag: $HOST
 
 # 1. Query metadata for required LLVM revision and official base
 META="$(python3 -c "
-import yaml, sys
-with open('$NDK_META') as f:
-    data = yaml.safe_load(f)
-entry = next((r for r in data.get('releases', []) if r['release'] == '$RELEASE_CLEAN'), None)
-if not entry:
+import sys, os
+
+metadata_file = '$NDK_META'
+rel = '$RELEASE_CLEAN'
+
+def parse_with_yaml():
+    import yaml
+    with open(metadata_file) as f:
+        data = yaml.safe_load(f)
+    entry = next((r for r in data.get('releases', []) if r['release'] == rel), None)
+    if entry:
+        return f\"{entry['required_llvm']}|{entry['llvm_artifact']}|{entry['official_archive']}|{entry['official_url']}\"
+    return None
+
+def parse_fallback():
+    with open(metadata_file) as f:
+        content = f.read()
+    blocks = content.split('  - release:')
+    for b in blocks[1:]:
+        lines = [line.strip() for line in b.splitlines()]
+        current_rel = lines[0].strip('\"\' ')
+        if current_rel == rel:
+            props = {}
+            for line in lines[1:]:
+                if ':' in line and not line.startswith('-'):
+                    k, v = line.split(':', 1)
+                    props[k.strip()] = v.strip('\"\' ')
+            return f\"{props.get('required_llvm')}|{props.get('llvm_artifact')}|{props.get('official_archive')}|{props.get('official_url')}\"
+    return None
+
+res = None
+try:
+    res = parse_with_yaml()
+except Exception:
+    res = parse_fallback()
+
+if res:
+    print(res)
+else:
     sys.exit(1)
-print(f\"{entry['required_llvm']}|{entry['llvm_artifact']}|{entry['official_archive']}|{entry['official_url']}\")
-" 2>/dev/null || true)"
+")"
 
 if [ -z "$META" ]; then
     err "NDK release $RELEASE_CLEAN not found in $NDK_META"

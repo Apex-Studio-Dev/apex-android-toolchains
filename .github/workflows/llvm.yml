@@ -128,8 +128,8 @@ jobs:
 
       - name: Prepare /mnt/build
         run: |
-          sudo mkdir -p /mnt/build
-          sudo chown $(id -u):$(id -g) /mnt/build
+          sudo mkdir -p /mnt/build /mnt/build/.ccache
+          sudo chown -R $(id -u):$(id -g) /mnt/build
           rm -rf "$GITHUB_WORKSPACE"
           ln -s /mnt/build "$GITHUB_WORKSPACE"
 
@@ -139,7 +139,7 @@ jobs:
       - name: Cache ccache
         uses: actions/cache@v4
         with:
-          path: /mnt/build/.ccache
+          path: .ccache
           key: llvm-ccache-${{ matrix.revision }}-${{ matrix.target }}-${{ github.sha }}
           restore-keys: |
             llvm-ccache-${{ matrix.revision }}-${{ matrix.target }}-

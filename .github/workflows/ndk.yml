@@ -138,7 +138,7 @@ jobs:
       - name: Prepare /mnt/build
         run: |
           sudo mkdir -p /mnt/build
-          sudo chown $(id -u):$(id -g) /mnt/build
+          sudo chown -R $(id -u):$(id -g) /mnt/build
           rm -rf "$GITHUB_WORKSPACE"
           ln -s /mnt/build "$GITHUB_WORKSPACE"
 

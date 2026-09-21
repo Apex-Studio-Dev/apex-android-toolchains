@@ -15,7 +15,7 @@ LABEL org.opencontainers.image.description="Builder image for Apex Android LLVM 
 RUN apt-get update && apt-get install -y --no-install-recommends software-properties-common \
     && apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates aria2 curl wget xz-utils unzip git make cmake ninja-build \
-        build-essential file p7zip-full python3 python3-pip python3-dev python3-setuptools \
+        build-essential file p7zip-full python3 python3-pip python3-dev python3-setuptools python3-yaml \
         autoconf automake libtool autoconf-archive pkg-config rsync \
         clang lld patchelf binutils zstd ccache \
         zlib1g-dev libssl-dev libxml2-dev liblzma-dev libbz2-dev uuid-dev cpio bzip2 \

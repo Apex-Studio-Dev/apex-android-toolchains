@@ -105,33 +105,29 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.matrix-init.outputs.matrix) }}
     steps:
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@v10
-        with:
-          root-reserve-mb: 5120
-          swap-size-mb: 5120
-          remove-dotnet: true
-          remove-android: true
-          remove-haskell: true
-          remove-codeql: true
-          remove-docker-images: true
-          build-mount-path: /mnt
-
-      - name: Move Docker to /mnt
+      - name: Free Disk Space
         run: |
-          sudo systemctl stop docker.socket docker.service
-          sudo mkdir -p /mnt/docker
-          sudo rsync -aqP /var/lib/docker/ /mnt/docker/
-          sudo rm -rf /var/lib/docker
-          sudo ln -s /mnt/docker /var/lib/docker
-          sudo systemctl start docker
+          echo "Disk space before cleanup:"
+          df -h
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /opt/hostedtoolcache \
+            /var/lib/docker/image
+          sudo docker system prune -af || true
+          echo "Disk space after cleanup:"
+          df -h
 
-      - name: Prepare /mnt/build
+      - name: Configure Swap
         run: |
-          sudo mkdir -p /mnt/build /mnt/build/.ccache
-          sudo chown -R $(id -u):$(id -g) /mnt/build
-          rm -rf "$GITHUB_WORKSPACE"
-          ln -s /mnt/build "$GITHUB_WORKSPACE"
+          if [ ! -f /swapfile ]; then
+            sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+          fi
+          free -h
 
       - name: Checkout Monorepo
         uses: actions/checkout@v4
@@ -147,6 +143,7 @@ jobs:
             llvm-ccache-
 
       - name: Set up QEMU
+        if: matrix.target != 'x86_64-linux-android'
         uses: docker/setup-qemu-action@v3
 
       - name: Log in to GHCR
@@ -183,8 +180,9 @@ jobs:
 
       - name: Build LLVM/Clang in Docker Container
         run: |
+          mkdir -p build .ccache
           docker run --rm \
-            -v "/mnt/build:/work" \
+            -v "$GITHUB_WORKSPACE:/work" \
             -w /work \
             --user "$(id -u):$(id -g)" \
             -e HOME=/work \
@@ -199,7 +197,7 @@ jobs:
       - name: Verify LLVM ELF & Functionality in Docker Container
         run: |
           docker run --rm \
-            -v "/mnt/build:/work" \
+            -v "$GITHUB_WORKSPACE:/work" \
             -w /work \
             --user "$(id -u):$(id -g)" \
             -e HOME=/work \

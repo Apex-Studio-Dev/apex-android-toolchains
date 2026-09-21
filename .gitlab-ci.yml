@@ -14,6 +14,7 @@ variables:
   REPO_OWNER: "Apex-Studio-Dev"
 
 default:
+  image: ghcr.io/apex-studio-dev/apex-toolchains-builder:latest
   tags:
     - arm64
     - linux

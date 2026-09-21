@@ -48,8 +48,46 @@ jobs:
     name: Build NDK ${{ inputs.release || github.ref_name }}
     runs-on: ubuntu-24.04
     steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@v10
+        with:
+          root-reserve-mb: 5120
+          swap-size-mb: 5120
+          remove-dotnet: true
+          remove-android: true
+          remove-haskell: true
+          remove-codeql: true
+          remove-docker-images: true
+          build-mount-path: /mnt
+
+      - name: Move Docker to /mnt
+        run: |
+          sudo systemctl stop docker.socket docker.service
+          sudo mkdir -p /mnt/docker
+          sudo rsync -aqP /var/lib/docker/ /mnt/docker/
+          sudo rm -rf /var/lib/docker
+          sudo ln -s /mnt/docker /var/lib/docker
+          sudo systemctl start docker
+
+      - name: Prepare /mnt/build
+        run: |
+          sudo mkdir -p /mnt/build
+          sudo chown $(id -u):$(id -g) /mnt/build
+          rm -rf "$GITHUB_WORKSPACE"
+          ln -s /mnt/build "$GITHUB_WORKSPACE"
+
       - name: Checkout Monorepo
         uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine Release and Tag
         id: meta
@@ -69,25 +107,42 @@ jobs:
           echo "rebuild_llvm=$REBUILD" >> "$GITHUB_OUTPUT"
           echo "Assembling NDK: $REL with tag: $TAG (Platform: $PLATFORM)"
 
-      - name: Set up Dependencies
+      - name: Resolve Builder Docker Image
         run: |
-          sudo apt-get update
-          sudo apt-get install -y aria2 xz-utils curl file binutils qemu-user-static
+          OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          IMAGE="ghcr.io/${OWNER}/apex-toolchains-builder:latest"
+          echo "BUILDER_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          if ! docker pull "$IMAGE"; then
+            echo "GHCR image not found or inaccessible; building locally from docker/Dockerfile..."
+            docker build -t "$IMAGE" -f docker/Dockerfile docker/
+          fi
 
-      - name: Build / Assemble Custom NDK
+      - name: Build / Assemble Custom NDK in Docker Container
         run: |
           ARGS=( "--release=${{ steps.meta.outputs.release }}" "--platform=${{ steps.meta.outputs.platform }}" )
           if [ "${{ steps.meta.outputs.rebuild_llvm }}" = "true" ]; then
             ARGS+=( "--rebuild-llvm" )
           fi
-          scripts/build-ndk.sh "${ARGS[@]}"
+          docker run --rm \
+            -v "/mnt/build:/work" \
+            -w /work \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/work \
+            "$BUILDER_IMAGE" \
+            scripts/build-ndk.sh "${ARGS[@]}"
 
-      - name: Verify Cross-Compilation (ARM64 & ARM32)
+      - name: Verify Cross-Compilation (ARM64 & ARM32) in Docker Container
         run: |
           NDK_DIR="$(find build/ndk-${{ steps.meta.outputs.release }}/official-ndk -maxdepth 1 -mindepth 1 -type d -name 'android-ndk-*' | head -n 1)"
-          scripts/verify-ndk.sh \
-            --ndk="$NDK_DIR" \
-            --release="${{ steps.meta.outputs.release }}"
+          docker run --rm \
+            -v "/mnt/build:/work" \
+            -w /work \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/work \
+            "$BUILDER_IMAGE" \
+            scripts/verify-ndk.sh \
+              --ndk="$NDK_DIR" \
+              --release="${{ steps.meta.outputs.release }}"
 
       - name: Upload Artifact to GitHub Release
         uses: softprops/action-gh-release@v2

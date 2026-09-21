@@ -149,22 +149,46 @@ log "Building native host tools (GNU make, yasm) for ARM64..."
 HOST_TOOLS_DIR="$WORK_DIR/host-tools"
 mkdir -p "$HOST_TOOLS_DIR/bin"
 
+# Helper to download source files if not locally present
+fetch_source() {
+    local dest="$1"
+    local url="$2"
+    if [ -f "$dest" ]; then return 0; fi
+    mkdir -p "$(dirname "$dest")"
+    log "Downloading $(basename "$dest") from $url..."
+    if command -v aria2c >/dev/null; then
+        aria2c --console-log-level=error --max-tries=5 -x 4 -s 4 --allow-overwrite=true -o "$(basename "$dest")" -d "$(dirname "$dest")" "$url" || curl -fsSL -o "$dest" "$url"
+    else
+        curl -fsSL -o "$dest" "$url"
+    fi
+}
+
 # Build make 4.4 if not already built
 if [ ! -f "$HOST_TOOLS_DIR/bin/make" ]; then
     MAKE_TAR="$ROOT_DIR/ndk/sources/make-4.4.tar.gz"
-    [ -f "$MAKE_TAR" ] || MAKE_TAR="/data/data/com.termux/files/home/tools/android-ndk-custom/sources/make-4.4.tar.gz"
+    if [ ! -f "$MAKE_TAR" ]; then
+        fetch_source "$MAKE_TAR" "https://ftp.gnu.org/gnu/make/make-4.4.tar.gz" || true
+    fi
     if [ -f "$MAKE_TAR" ]; then
-        log "Compiling native GNU Make 4.4..."
+        log "Compiling native GNU Make 4.4 for ARM64..."
         (
             cd "$WORK_DIR"
             rm -rf make-4.4
             tar -xzf "$MAKE_TAR"
             cd make-4.4
-            ./configure --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC"
+            CONF_ARGS=( --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC" )
+            if [ "$(uname -m)" != "aarch64" ]; then
+                if command -v aarch64-linux-gnu-gcc >/dev/null; then
+                    CONF_ARGS+=( --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc )
+                elif command -v zig >/dev/null; then
+                    CONF_ARGS+=( --host=aarch64-linux-musl CC="zig cc -target aarch64-linux-musl" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
+                fi
+            fi
+            ./configure "${CONF_ARGS[@]}"
             make -j"$JOBS"
             make install
         )
-    elif command -v make >/dev/null; then
+    elif [ "$(uname -m)" = "aarch64" ] && command -v make >/dev/null; then
         cp "$(command -v make)" "$HOST_TOOLS_DIR/bin/make"
     fi
 fi
@@ -172,19 +196,29 @@ fi
 # Build yasm if available
 if [ ! -f "$HOST_TOOLS_DIR/bin/yasm" ]; then
     YASM_TAR="$ROOT_DIR/ndk/sources/yasm-1.3.0.tar.gz"
-    [ -f "$YASM_TAR" ] || YASM_TAR="/data/data/com.termux/files/home/tools/android-ndk-custom/sources/yasm-1.3.0.tar.gz"
+    if [ ! -f "$YASM_TAR" ]; then
+        fetch_source "$YASM_TAR" "https://www.tortall.net/projects/yasm/releases/yasm-1.3.0.tar.gz" || true
+    fi
     if [ -f "$YASM_TAR" ]; then
-        log "Compiling native yasm 1.3.0..."
+        log "Compiling native yasm 1.3.0 for ARM64..."
         (
             cd "$WORK_DIR"
             rm -rf yasm-1.3.0
             tar -xzf "$YASM_TAR"
             cd yasm-1.3.0
-            ./configure --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC"
+            CONF_ARGS=( --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC" )
+            if [ "$(uname -m)" != "aarch64" ]; then
+                if command -v aarch64-linux-gnu-gcc >/dev/null; then
+                    CONF_ARGS+=( --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc )
+                elif command -v zig >/dev/null; then
+                    CONF_ARGS+=( --host=aarch64-linux-musl CC="zig cc -target aarch64-linux-musl" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
+                fi
+            fi
+            ./configure "${CONF_ARGS[@]}"
             make -j"$JOBS"
             make install
         )
-    elif command -v yasm >/dev/null; then
+    elif [ "$(uname -m)" = "aarch64" ] && command -v yasm >/dev/null; then
         cp "$(command -v yasm)" "$HOST_TOOLS_DIR/bin/yasm"
     fi
 fi

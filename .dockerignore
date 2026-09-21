@@ -1,0 +1,8 @@
+build/
+dist/
+artifacts/
+.git
+.github
+*.tar.xz
+*.tar.gz
+*.zip

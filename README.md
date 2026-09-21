@@ -72,11 +72,19 @@ git tag llvm-r487747e && git push origin llvm-r487747e
 git tag ndk-r26d && git push origin ndk-r26d
 ```
 
-### GitLab CI
-Trigger via **CI/CD -> Pipelines -> Run Pipeline** with variables:
-- `TARGET_REVISION=clang-r487747e`
-- `TARGET_RELEASE=r26d`
-- `PLATFORM=bionic`
+### Docker Builder Container
+The toolchains build environment is encapsulated in a dedicated builder image:
+`ghcr.io/apex-studio-dev/apex-toolchains-builder:latest`
+- Built from `docker/Dockerfile` and automatically published via `.github/workflows/docker-image.yml`.
+- Pre-equipped with Clang, LLD, CMake, Ninja, Zig cross-compilers, QEMU ARM64 user emulation, and packaging tools.
+- CI workflows automatically pull this container and mount `/mnt/build` into `/work`.
+
+### CI Runner Disk & Swap Optimization
+LLVM builds require substantial disk space and swap. CI workflows incorporate `easimon/maximize-build-space@v10`:
+1. Cleans unneeded packages (`dotnet`, `android`, `haskell`, `codeql`) to free ~50+ GB.
+2. Allocates dedicated swap file on `/mnt`.
+3. Moves Docker storage root to `/mnt/docker`.
+4. Relocates `$GITHUB_WORKSPACE` to `/mnt/build`.
 
 ---
 

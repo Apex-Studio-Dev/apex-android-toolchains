@@ -185,4 +185,3 @@ if [ "$PACKAGE_AFTER_BUILD" = true ]; then
 fi
 
 log "LLVM $REVISION_CLEAN build completed successfully!"
-EOF

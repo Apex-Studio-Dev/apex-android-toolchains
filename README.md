@@ -1,65 +1,130 @@
-# apex-android-toolchains
+# Apex Android Toolchains
 
-Monorepo for building **Custom Android LLVM/Clang** and **Custom Android NDK** with native execution support across **all 4 Android host architectures**, supporting execution on **Android Bionic** (Termux, on-device IDEs), Android Emulators, and standard Linux distributions.
+[![CI - LLVM Multi-Arch](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/llvm.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/llvm.yml)
+[![CI - NDK Multi-Arch](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/ndk.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/ndk.yml)
+[![Docker Builder Image](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/docker-image.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/docker-image.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+An enterprise-grade, automated monorepo designed to build **Custom Android LLVM/Clang** and standalone **Custom Android NDK** toolchains with **native execution support across all 4 Android host architectures**, capable of full multi-target cross-compilation.
 
 ---
 
-## 🎯 Architecture Support
+## 📖 Table of Contents
 
-### 1. Host Execution Architectures (Where the toolchains run)
-The toolchain binaries (`clang`, `ld.lld`, `make`, `yasm`, etc.) are built for native execution across 4 distinct host architectures:
+- [Motivation & Overview](#-motivation--overview)
+- [Key Features](#-key-features)
+- [Architecture Model](#-architecture-model)
+  - [Host Execution Platforms](#1-host-execution-platforms-where-the-toolchain-runs)
+  - [Multi-Target Code Generation](#2-multi-target-code-generation-what-the-toolchain-compiles-for)
+- [Docker Builder Container](#-docker-builder-container)
+- [Releases & Artifact Specifications](#-releases--artifact-specifications)
+  - [LLVM / Clang Toolchains](#1-llvm--clang-revisions-exact-aosp-commits)
+  - [Custom Android NDK Releases](#2-custom-android-ndk-releases)
+- [Quick Start & Usage](#-quick-start--usage)
+  - [Using with Termux / Android Shell](#1-using-with-termux--android-shell)
+  - [Using with Gradle / Android Studio](#2-using-with-gradle--android-studio)
+  - [Using with Standalone CMake](#3-using-with-standalone-cmake)
+- [CI/CD Build & Release Automation](#-cicd-build--release-automation)
+  - [GitHub Actions Dynamic Strategy Matrix](#github-actions-dynamic-strategy-matrix)
+  - [Triggering Builds via GitHub CLI](#triggering-builds-via-github-cli)
+  - [Publishing Releases via Git Tags](#publishing-releases-via-git-tags)
+- [Rigorous Verification Pipeline](#-rigorous-verification-pipeline)
+- [Repository Structure](#-repository-structure)
+- [Documentation Index](#-documentation-index)
+- [License](#-license)
 
-| Host Architecture | ABI / Target Triple | Platform / Use Case |
+---
+
+## 💡 Motivation & Overview
+
+Official Google Android NDK and LLVM releases only provide prebuilt host compilers for `linux-x86_64`, `darwin-x86_64/arm64`, and `windows-x86_64`. Developers wishing to compile native C/C++ applications directly on Android devices (e.g. inside **Termux**, mobile IDEs, or on-device CI test runners) or on 32-bit Android devices have historically been left without official native toolchains.
+
+**`apex-android-toolchains`** solves this by providing:
+1. **Native Execution on Android:** Binaries run directly on Android OS (via Bionic libc) without requiring glibc chroots or PRoot translation layers.
+2. **Support for All 4 Android Host Architectures:** Available for `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`.
+3. **True Cross-Compilation:** Any single compiler binary—regardless of the host machine it runs on—can target all 5 Android ABIs (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`, and `riscv64`).
+4. **Cloud-First CI Engine:** Zero local compilation load on mobile devices. All compilation and packaging run via automated GitHub Actions workflows inside optimized Docker containers.
+
+---
+
+## ✨ Key Features
+
+- ⚡ **Native Execution on 4 Android Host Architectures:**
+  Native ELF executables built for `aarch64-linux-android`, `armv7a-linux-androideabi`, `x86_64-linux-android`, and `i686-linux-android`.
+- 🌐 **Full Multi-Target Backend:**
+  Configured with `-DLLVM_TARGETS_TO_BUILD="AArch64;ARM;X86;RISCV"`. A single compiler can build binaries for any Android device.
+- 📦 **Complete Standalone NDK Ecosystem:**
+  Spliced with official Google NDK skeletons, equipped with matching AOSP LLVM revisions, native static GNU Make 4.4 and Yasm 1.3.0, and complete Bionic sysroots.
+- 🐳 **Prebuilt Multiplatform Builder Container (`ghcr.io`):**
+  A dedicated container (`linux/amd64` and `linux/arm64`) equipped with cross-compilers (`gcc-aarch64`, `gcc-armhf`, `gcc-i686`), Zig, Clang 18, LLD, CMake, and Ninja.
+- 🔀 **Dynamic 2D Strategy Matrix:**
+  GitHub Actions CI dynamically schedules parallel jobs across runners, allowing simultaneous multi-architecture compilation (`target=all`).
+- 🛡️ **Automated Pre-Release Verification:**
+  Every binary undergoes automated ELF machine header inspection and end-to-end multi-ABI test compilation before release.
+- 🚀 **Resource & Linker Optimization:**
+  Unlocks ~50+ GB of runner disk space via `easimon/maximize-build-space@v10`, uses `ccache`, and enforces `-DLLVM_PARALLEL_LINK_JOBS=1` to eliminate runner OOM crashes.
+- 🔒 **Cryptographic Integrity:**
+  Every release artifact includes verified `SHA256SUMS` and `SHA512SUMS`.
+
+---
+
+## 🎯 Architecture Model
+
+### 1. Host Execution Platforms (Where the toolchain runs)
+
+| Host Architecture | Canonical Target Triple | Platform & Use Case |
 | :--- | :--- | :--- |
 | **ARM64** | `aarch64-linux-android` (`arm64-v8a`) | Modern Android smartphones, tablets, Termux |
-| **ARM32** | `armv7a-linux-androideabi` (`armeabi-v7a`) | Legacy 32-bit Android devices, IoT devices |
-| **x86_64** | `x86_64-linux-android` | Android PC Emulators, WSA, Waydroid Linux |
+| **ARM32** | `armv7a-linux-androideabi` (`armeabi-v7a`) | Legacy 32-bit Android devices, embedded IoT |
+| **x86_64** | `x86_64-linux-android` | Android PC Emulators, Windows Subsystem for Android (WSA), Waydroid |
 | **x86 (32-bit)** | `i686-linux-android` | 32-bit Android PC Emulators |
 
-### 2. Target Compilation Architectures (What the toolchains compile for)
-Regardless of which host architecture executes the compiler, **every single toolchain binary is a full multi-target cross-compiler** configured with `-DLLVM_TARGETS_TO_BUILD="AArch64;ARM;X86;RISCV"`.
+### 2. Multi-Target Code Generation (What the toolchain compiles for)
 
-A single Clang binary running on any host can cross-compile C/C++ source code to:
-- `arm64-v8a` (`aarch64-linux-android`)
-- `armeabi-v7a` (`arm-linux-androideabi`)
-- `x86_64` (`x86_64-linux-android`)
-- `x86` (`i686-linux-android`)
-- `riscv64` (`riscv64-linux-android`)
+Every single Clang compiler built by this project contains the full backend code generator. Regardless of whether you run Clang on a phone (ARM64) or in an emulator (x86_64), you can cross-compile C/C++ code to:
+
+* `arm64-v8a` (`aarch64-linux-android`)
+* `armeabi-v7a` (`arm-linux-androideabi` / `armv7a-linux-androideabi`)
+* `x86_64` (`x86_64-linux-android`)
+* `x86` (`i686-linux-android`)
+* `riscv64` (`riscv64-linux-android`)
 
 ---
 
 ## 🐳 Docker Builder Container
 
-CI and local builds run inside a dedicated, multiplatform builder container:
+All compilation runs inside a dedicated, reproducible container published to GitHub Container Registry:
 
-**`ghcr.io/apex-studio-dev/apex-toolchains-builder:latest`**
+```bash
+docker pull ghcr.io/apex-studio-dev/apex-toolchains-builder:latest
+```
 
-- **Supported Container Hosts:** `linux/amd64` (Standard CI runners, PC) and `linux/arm64` (Apple Silicon, ARM64 servers).
-- **Pre-installed Cross-Compilers:**
-  - `gcc-aarch64-linux-gnu` / `g++-aarch64-linux-gnu`
-  - `gcc-arm-linux-gnueabihf` / `g++-arm-linux-gnueabihf`
-  - `gcc-i686-linux-gnu` / `g++-i686-linux-gnu`
-  - `zig` (for static musl / bionic C/C++ cross-compilation)
-- **Host Tools:** Clang 18, LLD, CMake, Ninja, Python 3, ccache, patchelf, aria2, and QEMU user emulation.
+- **Supported Container Host Platforms:** `linux/amd64` and `linux/arm64`.
+- **Cross-Compilation Toolchains:**
+  - `gcc-aarch64-linux-gnu` / `g++-aarch64-linux-gnu` (ARM64 cross-compiler)
+  - `gcc-arm-linux-gnueabihf` / `g++-arm-linux-gnueabihf` (ARM32 cross-compiler)
+  - `gcc-i686-linux-gnu` / `g++-i686-linux-gnu` (x86 32-bit cross-compiler)
+  - `zig` (Used for building static, libc-agnostic host helper utilities)
+- **Host Build Suite:** Clang 18, LLD, CMake, Ninja, Python 3, ccache, patchelf, aria2, and QEMU user emulation (`qemu-user-static`).
 
-> **Note:** The builder container runs on 64-bit hosts (`amd64` and `arm64`) and uses cross-compilers to generate the 4 Android toolchain variants (including 32-bit `armv7a` and `i686`).
+> **Architectural Note:** The builder container runs on 64-bit cloud runners (`amd64` / `arm64`) and cross-compiles the toolchains to all 4 Android host architectures.
 
 ---
 
-## 📦 Releases & Artifact Conventions
+## 📦 Releases & Artifact Specifications
 
-Artifacts published to GitHub Releases follow consistent, structured naming:
+Artifacts published to GitHub Releases adhere to standard naming conventions:
 
 * **LLVM Artifact:** `custom-llvm-<revision>-<target>.tar.xz`
-  *(e.g. `custom-llvm-r487747e-aarch64-linux-android.tar.xz`)*
+  *(e.g., `custom-llvm-r487747e-aarch64-linux-android.tar.xz`)*
 * **NDK Artifact:** `custom-android-ndk-<release>-<target>.tar.xz`
-  *(e.g. `custom-android-ndk-r26d-aarch64-linux-android.tar.xz`)*
-* **Backward-Compatible Alias:** For ARM64 targets, a symlink `*-linux-arm64.tar.xz` is also provided.
-* **Integrity:** Every release includes cryptographic checksums in `SHA256SUMS` and `SHA512SUMS`.
+  *(e.g., `custom-android-ndk-r26d-aarch64-linux-android.tar.xz`)*
+* **ARM64 Symlink:** For backward compatibility, `*-linux-arm64.tar.xz` symlinks are provided for ARM64 targets.
+* **Checksums:** Verified `SHA256SUMS` and `SHA512SUMS` accompany every release.
 
-### 1. LLVM Revisions (Exact AOSP Commits)
+### 1. LLVM / Clang Revisions (Exact AOSP Commits)
 
-| LLVM Major | Clang Revision | AOSP Branch / Manifest ID | Git Tag | Available Host Architectures |
+| LLVM Major | Clang Revision | AOSP Manifest Tag / Branch | Git Tag | Available Host Architectures |
 | :---: | :---: | :---: | :---: | :--- |
 | **LLVM 17** | `clang-r487747c` | `r487747c` | `llvm-r487747c` | `aarch64`, `armv7a`, `x86_64`, `i686` |
 | **LLVM 17** | `clang-r487747d` | `r487747d` | `llvm-r487747d` | `aarch64`, `armv7a`, `x86_64`, `i686` |
@@ -75,8 +140,6 @@ Artifacts published to GitHub Releases follow consistent, structured naming:
 | **LLVM 21** | `clang-r574158c` | `r574158c` | `llvm-r574158c` | `aarch64`, `armv7a`, `x86_64`, `i686` |
 
 ### 2. Custom Android NDK Releases
-
-Assembled from official AOSP NDK skeletons, spliced with native LLVM compiler binaries for the target host, and equipped with native GNU Make 4.4 and Yasm 1.3.0.
 
 | NDK Release | Clang Revision | Git Tag | Official Base Version | Available Host Architectures |
 | :---: | :---: | :---: | :---: | :--- |
@@ -96,109 +159,187 @@ Assembled from official AOSP NDK skeletons, spliced with native LLVM compiler bi
 
 ---
 
-## ⚡ CI/CD Build Instructions
+## 🚀 Quick Start & Usage
 
-All builds execute via GitHub Actions using the dedicated builder container with build space optimization and ccache.
+### 1. Using with Termux / Android Shell
 
-### Triggering via GitHub CLI
+Download the tarball matching your device architecture (most modern phones use `aarch64-linux-android`):
 
 ```bash
-# Build LLVM r487747e for all 4 host architectures concurrently:
+# 1. Download custom NDK release
+wget https://github.com/Apex-Studio-Dev/apex-android-toolchains/releases/download/ndk-r26d/custom-android-ndk-r26d-aarch64-linux-android.tar.xz
+
+# 2. Extract to your preferred location
+mkdir -p ~/android-ndk-r26d
+tar -xf custom-android-ndk-r26d-aarch64-linux-android.tar.xz -C ~/android-ndk-r26d --strip-components=1
+
+# 3. Export environment variables
+export ANDROID_NDK_ROOT=~/android-ndk-r26d
+export PATH="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-arm64/bin:$PATH"
+
+# 4. Verify compiler execution directly on your device
+aarch64-linux-android30-clang --version
+```
+
+### 2. Using with Gradle / Android Studio
+
+In your Android project root, set the path to your custom NDK in `local.properties`:
+
+```properties
+ndk.dir=/path/to/custom-android-ndk-r26d
+```
+
+In `app/build.gradle`:
+
+```groovy
+android {
+    ndkVersion "26.3.11579264" // matches NDK r26d
+
+    defaultConfig {
+        externalNativeBuild {
+            cmake {
+                abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'
+            }
+        }
+    }
+}
+```
+
+### 3. Using with Standalone CMake
+
+```bash
+cmake -B build -S . \
+  -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
+  -DANDROID_ABI="arm64-v8a" \
+  -DANDROID_PLATFORM=android-30 \
+  -GNinja
+
+ninja -C build
+```
+
+---
+
+## ⚡ CI/CD Build & Release Automation
+
+All compilation workflows run exclusively in cloud CI using GitHub Actions.
+
+### GitHub Actions Dynamic Strategy Matrix
+
+The workflows in [`.github/workflows/llvm.yml`](.github/workflows/llvm.yml) and [`.github/workflows/ndk.yml`](.github/workflows/ndk.yml) implement dynamic 2D matrices:
+- **Parallel Multi-Runner Execution:** Selecting `target=all` instantiates 4 separate GitHub Actions runner VMs executing in parallel.
+- **Fail-Fast Disabled (`fail-fast: false`):** A failure in one architecture does not interrupt or cancel builds for other architectures.
+- **Prebuilt Artifact Reusability:** When assembling NDK releases, CI downloads the matching prebuilt LLVM artifact rather than rebuilding LLVM from source.
+
+### Triggering Builds via GitHub CLI
+
+```bash
+# Build LLVM r487747e for all 4 host architectures in parallel:
 gh workflow run llvm.yml -f revision=clang-r487747e -f target=all
 
 # Build LLVM for a specific host architecture (e.g. aarch64):
 gh workflow run llvm.yml -f revision=clang-r487747e -f target=aarch64-linux-android
 
-# Build Custom NDK r26d for all 4 host architectures:
+# Build Custom NDK r26d for all 4 host architectures in parallel:
 gh workflow run ndk.yml -f release=r26d -f target=all
 
 # Build Custom NDK r26d for a specific host architecture:
 gh workflow run ndk.yml -f release=r26d -f target=aarch64-linux-android
 ```
 
-### Triggering via Git Tags
+### Publishing Releases via Git Tags
 
-Pushing a tag automatically initiates the multi-architecture matrix build and publishes releases:
+Pushing a versioned tag triggers automated matrix compilation and attaches the resulting tarballs directly to GitHub Releases:
+
 ```bash
-# Release LLVM (all 4 architectures):
+# Build and release LLVM across all 4 architectures:
 git tag llvm-r487747e && git push origin llvm-r487747e
 
-# Release NDK (all 4 architectures):
+# Build and release Custom NDK across all 4 architectures:
 git tag ndk-r26d && git push origin ndk-r26d
 ```
 
-### CI Strategy Matrix & Optimization
-- **Dynamic 2D Matrix:** Dynamically scales jobs based on selected revisions/releases and target architectures. When `target=all` is selected, 4 independent runner VMs execute concurrently.
-- **Fail-Fast Disabled (`fail-fast: false`):** Failure in one architecture does not abort builds for the remaining architectures.
-- **Build Space Maximization (`easimon/maximize-build-space@v10`):** Removes unneeded pre-installed software on GitHub runners to free ~50+ GB of disk space on `/mnt/build`.
-- **OOM Protection:** Uses `-DLLVM_PARALLEL_COMPILE_JOBS=$(nproc)` and enforces `-DLLVM_PARALLEL_LINK_JOBS=1` with `lld` to prevent exit code 137 (OOM-killer).
+---
+
+## 🛡️ Rigorous Verification Pipeline
+
+Before packaging and uploading, every toolchain artifact is validated through automated test scripts running inside the Docker container:
+
+### 1. LLVM Verification ([`scripts/verify-llvm.sh`](scripts/verify-llvm.sh))
+- **ELF Header Inspection:** Validates binary machine architecture using `file` and `readelf -h`:
+  - `aarch64-linux-android` ➔ `Class: ELF64`, `Machine: AArch64`
+  - `armv7a-linux-androideabi` ➔ `Class: ELF32`, `Machine: ARM`
+  - `x86_64-linux-android` ➔ `Class: ELF64`, `Machine: Advanced Micro Devices X86-64`
+  - `i686-linux-android` ➔ `Class: ELF32`, `Machine: Intel 80386`
+- **Compiler Sanity Execution:** Executes `clang --version`, `clang++ --version`, and `ld.lld --version` via QEMU user-static emulation.
+- **Multi-Target Code Generation Test:** The newly compiled Clang compiles a test program to 4 object files (`.o`), verifying each via `readelf`:
+  ```bash
+  clang --target=aarch64-linux-android30 -c test.c -o test_arm64.o
+  clang --target=armv7a-linux-androideabi30 -c test.c -o test_arm32.o
+  clang --target=x86_64-linux-android30 -c test.c -o test_x86_64.o
+  clang --target=i686-linux-android30 -c test.c -o test_x86.o
+  ```
+
+### 2. NDK Verification ([`scripts/verify-ndk.sh`](scripts/verify-ndk.sh))
+- **Sysroot & Library Check:** Verifies header availability in `sysroot/usr/include` and target libraries in `sysroot/usr/lib/<target>`.
+- **End-to-End Dynamic Link Verification:** Compiles `hello.c` into native executables linked against Android Bionic `libc.so` for ARM64, ARM32, x86_64, and x86, inspecting dynamic tags (`DT_NEEDED libc.so`).
 
 ---
 
-## 🔍 Validation Standards
-
-Every toolchain artifact is validated by [`scripts/verify-llvm.sh`](scripts/verify-llvm.sh) prior to packaging:
-
-1. **ELF Header & Machine Validation:**
-   - `aarch64-linux-android`: Verified as `ELF64` and `Machine: AArch64`
-   - `armv7a-linux-androideabi`: Verified as `ELF32` and `Machine: ARM`
-   - `x86_64-linux-android`: Verified as `ELF64` and `Machine: Advanced Micro Devices X86-64`
-   - `i686-linux-android`: Verified as `ELF32` and `Machine: Intel 80386`
-2. **Compiler & Tool Execution:**
-   - `clang --version`, `clang++ --version`, `ld.lld --version`
-3. **Multi-Target Code Generation Verification:**
-   Validates that the compiler can generate valid object code for all Android target ABIs:
-   ```bash
-   clang --target=aarch64-linux-android30 -c test.c -o test_arm64.o
-   clang --target=armv7a-linux-androideabi30 -c test.c -o test_arm32.o
-   clang --target=x86_64-linux-android30 -c test.c -o test_x86_64.o
-   clang --target=i686-linux-android30 -c test.c -o test_x86.o
-   ```
-
----
-
-## 📁 Repository Layout
+## 📁 Repository Structure
 
 ```
 apex-android-toolchains/
 ├── docker/
-│   ├── Dockerfile                # Multiplatform builder container (amd64 & arm64)
+│   ├── Dockerfile                # Multi-platform builder image definition
 │   └── .dockerignore
 ├── llvm/
-│   └── patches/                  # LLVM revision patches
+│   └── patches/                  # Downstream LLVM revision patches
 ├── ndk/
-│   ├── patches/                  # Patches for bionic, cmake, and ndk scripts
-│   └── sources/                  # Sources for make 4.4 and yasm 1.3.0
+│   ├── patches/                  # Patches for bionic sysroots and NDK build scripts
+│   └── sources/                  # Source archives for GNU Make 4.4 and Yasm 1.3.0
 ├── metadata/
-│   ├── llvm-releases.yaml        # Exact AOSP commits and manifest IDs
-│   ├── ndk-releases.yaml         # NDK releases, mapped LLVM & official bases
+│   ├── llvm-releases.yaml        # Exact AOSP commits, manifest IDs, and branches
+│   ├── ndk-releases.yaml         # NDK releases, mapped LLVM revisions & base URLs
 │   └── releases.yaml             # Unified release matrix
 ├── scripts/
-│   ├── build-llvm.sh             # Build LLVM/Clang with --target support
-│   ├── build-ndk.sh              # Assemble Custom NDK with --target support
-│   ├── build-all-llvm.sh         # Batch build all LLVM revisions
-│   ├── build-all-ndk.sh          # Batch build all NDK releases
-│   ├── fetch-llvm.sh             # Fetch prebuilt LLVM artifact or AOSP source
-│   ├── verify-llvm.sh            # Dynamic ELF & multi-arch codegen validation
-│   ├── package-llvm.sh           # Package custom-llvm-*.tar.xz with SHA checksums
-│   └── package-ndk.sh            # Package custom-android-ndk-*.tar.xz with SHA checksums
+│   ├── build-llvm.sh             # Compiles LLVM/Clang with multi-arch host support
+│   ├── build-ndk.sh              # Assembles Custom NDK with multi-arch host support
+│   ├── build-all-llvm.sh         # Batch build coordinator for all LLVM revisions
+│   ├── build-all-ndk.sh          # Batch build coordinator for all NDK releases
+│   ├── fetch-llvm.sh             # Fetches prebuilt LLVM artifacts or AOSP source trees
+│   ├── verify-llvm.sh            # Validates ELF headers & multi-target codegen
+│   ├── verify-ndk.sh             # Validates NDK sysroots and end-to-end cross-compilation
+│   ├── package-llvm.sh           # Packages custom-llvm-*.tar.xz with SHA checksums
+│   └── package-ndk.sh            # Packages custom-android-ndk-*.tar.xz with SHA checksums
 ├── docs/
-│   ├── ARCHITECTURE.md           # Architecture and dependency model
+│   ├── ARCHITECTURE.md           # Architectural model & host/target decoupling
 │   ├── BUILDING.md               # CI/CD and manual build documentation
-│   ├── RELEASES.md               # Complete release tables
-│   └── VERIFICATION.md           # ELF and cross-compilation verification tests
+│   ├── RELEASES.md               # Complete release tables and revision mappings
+│   └── VERIFICATION.md           # Detailed ELF and compilation test standards
 ├── .github/
 │   └── workflows/
-│       ├── docker-image.yml      # Multiplatform builder container publish workflow
+│       ├── docker-image.yml      # Automated builder container publish workflow
 │       ├── llvm.yml              # Dynamic matrix LLVM build & release workflow
 │       ├── ndk.yml               # Dynamic matrix NDK build & release workflow
 │       └── release.yml           # Release orchestration workflow
-├── .gitlab-ci.yml                # GitLab CI pipeline
+├── .gitlab-ci.yml                # GitLab CI pipeline definition
 └── README.md
 ```
 
 ---
 
+## 📚 Documentation Index
+
+For in-depth technical documentation, refer to:
+- [Architecture & Dependency Model](docs/ARCHITECTURE.md)
+- [Building Toolchains & Workflows](docs/BUILDING.md)
+- [Release Tables & Version Mappings](docs/RELEASES.md)
+- [Verification Standards & Test Specifications](docs/VERIFICATION.md)
+
+---
+
 ## 📄 License
 
-MIT License. See [LICENSE](LICENSE) for details.
+This repository is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
+
+*Android is a trademark of Google LLC. This project is an independent open-source toolchain development initiative by Apex Studio.*

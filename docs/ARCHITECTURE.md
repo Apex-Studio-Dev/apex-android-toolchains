@@ -2,15 +2,17 @@
 
 ## Overview
 
-`apex-android-toolchains` is designed as an independent, reproducible toolchain monorepo targeting **Linux ARM64 / Android Bionic Host** environments to cross-compile for:
-- **Android ARM64**: `aarch64-linux-android` (arm64-v8a)
-- **Android ARM32**: `arm-linux-androideabi` / `armeabi-v7a`
+`apex-android-toolchains` is designed as an independent, reproducible toolchain monorepo providing **native execution support across all 4 Android host architectures**:
+1. **`aarch64-linux-android`** (`arm64-v8a`): Modern 64-bit ARM smartphones, tablets, Termux.
+2. **`armv7a-linux-androideabi`** (`armeabi-v7a`): Legacy 32-bit ARM devices and embedded systems.
+3. **`x86_64-linux-android`**: 64-bit Android PC emulators, Windows Subsystem for Android (WSA), and Waydroid Linux.
+4. **`i686-linux-android`**: 32-bit Android PC emulators.
 
-The core architectural goal is strict decoupling between LLVM compiler builds and NDK assembly releases.
+Regardless of which host executes the compiler, every compiler binary is a complete **multi-target cross-compiler** configured with `-DLLVM_TARGETS_TO_BUILD="AArch64;ARM;X86;RISCV"`, capable of compiling code for all Android ABIs.
 
 ---
 
-## Dependency Model
+## Dependency Model & Decoupling
 
 ```
 +-------------------------------------------------------------+
@@ -21,79 +23,95 @@ The core architectural goal is strict decoupling between LLVM compiler builds an
                               v
 +-------------------------------------------------------------+
 |               1. Custom LLVM Build (CI)                     |
-|  - Native AArch64 binary compilation                        |
-|  - Validated as ELF 64-bit Machine: AArch64                 |
-|  - Statically linked or Bionic-compatible runtime           |
+|  - Multi-arch host compilation (aarch64, arm, x86_64, i686) |
+|  - Validated ELF machine types (AArch64, ARM, X86-64, i386) |
+|  - Bionic & static musl runtime compatibility               |
 +-------------------------------------------------------------+
                               |
                               v
 +-------------------------------------------------------------+
-|               2. LLVM Release & Artifact                    |
+|               2. LLVM Release & Artifacts                   |
 |  - Tag: llvm-<revision> (e.g. llvm-r487747e)                |
-|  - Artifact: custom-llvm-<rev>-linux-arm64.tar.xz           |
-|  - SHA256 & SHA512 Checksums                                |
+|  - Artifacts: custom-llvm-<rev>-<target>.tar.xz             |
+|  - Checksums: SHA256SUMS & SHA512SUMS                       |
 +-------------------------------------------------------------+
                               |
                               v  (Prebuilt artifact reuse)
 +-------------------------------------------------------------+
 |               3. Custom NDK Assembly (CI)                   |
 |  - Downloads official NDK base skeleton                     |
-|  - Fetches matching LLVM artifact (NO LLVM rebuild!)        |
-|  - Builds native host tools (GNU make 4.4, yasm 1.3.0)      |
-|  - Splices ARM64 LLVM into NDK toolchain directory          |
-|  - Configures Bionic/Linux host tags & CMake toolchains     |
+|  - Fetches matching LLVM artifact (zero LLVM recompilation) |
+|  - Compiles native host tools (GNU make 4.4, yasm 1.3.0)    |
+|  - Splices host LLVM into NDK toolchains directory          |
+|  - Adapts Bionic host tags, sysroots & CMake toolchains     |
 +-------------------------------------------------------------+
                               |
                               v
 +-------------------------------------------------------------+
 |               4. NDK Verification                           |
-|  - Compile hello.c -> aarch64-linux-android30 (ARM64)       |
-|  - Compile hello.c -> arm-linux-androideabi30 (ARM32)       |
-|  - Inspect ELF headers (readelf -h, readelf -d, file)       |
+|  - Test 1: Compile -> aarch64-linux-android30 (ARM64)       |
+|  - Test 2: Compile -> armv7a-linux-androideabi30 (ARM32)    |
+|  - Test 3: Compile -> x86_64-linux-android30 (x86_64)       |
+|  - Test 4: Compile -> i686-linux-android30 (x86 32-bit)     |
+|  - Validates dynamic link to Android Bionic libc.so         |
 +-------------------------------------------------------------+
                               |
                               v
 +-------------------------------------------------------------+
 |               5. Custom NDK Release                         |
 |  - Tag: ndk-<release> (e.g. ndk-r26d)                       |
-|  - Artifact: custom-android-ndk-rXX-linux-arm64.tar.xz      |
-|  - SHA256 & SHA512 Checksums                                |
+|  - Artifacts: custom-android-ndk-rXX-<target>.tar.xz        |
+|  - Checksums: SHA256SUMS & SHA512SUMS                       |
 +-------------------------------------------------------------+
 ```
 
 ---
 
-## Host Architecture: Bionic vs Linux ARM64
+## Host Architecture & Bionic Execution
 
-Standard Linux ARM64 binaries compiled dynamically against glibc require `/lib/ld-linux-aarch64.so.1`. When run on Android (such as in Termux or on-device IDEs), execution fails because Android uses **Bionic libc** and `/system/bin/linker64`.
+Standard Linux desktop binaries dynamically linked against glibc require `/lib/ld-linux-*.so`. When executed on Android (Termux, on-device mobile IDEs, or native Android shells), execution fails because Android uses **Bionic libc** and `/system/bin/linker` (or `/system/bin/linker64`).
 
-To provide execution compatibility:
-1. **Static Linking / Musl / Bionic Runtime**:
-   The compiler binaries are statically linked or targeted to Bionic. This allows the host binaries (`clang`, `clang++`, `ld.lld`, `llvm-*`, `make`, `yasm`) to run natively inside Android/Termux as well as any Linux ARM64 distribution (Ubuntu, Debian, Fedora, Alpine) without linker discrepancies.
-2. **Dynamic Target Cross-Compilation**:
-   While host tools execute on ARM64, their target outputs link against the NDK's target Bionic sysroot (`$NDK/toolchains/llvm/prebuilt/linux-arm64/sysroot`), correctly producing Android dynamic executables linking against `libc.so`, `libm.so`, `libdl.so`.
+To guarantee universal execution compatibility:
+1. **Static Linking & Bionic Runtimes:**
+   Host helper utilities (`make`, `yasm`) are statically compiled via Zig/musl, ensuring zero external libc runtime dependencies. LLVM/Clang binaries are built to run natively against Android Bionic or Linux.
+2. **Dynamic Target Cross-Compilation:**
+   When the compiler produces target code, it links against the NDK's target Bionic sysroot (`$NDK/toolchains/llvm/prebuilt/<host>/sysroot/usr/lib/<target>`), correctly emitting ELF binaries dynamically linked to Android's `libc.so`, `libm.so`, and `libdl.so`.
 
 ---
 
 ## Directory Layout in Assembled NDK
 
+Depending on the host target architecture, the prebuilt toolchain directory is mapped appropriately:
+
+| Host Architecture | Toolchain Path | Host Binaries Path |
+| :--- | :--- | :--- |
+| **`aarch64-linux-android`** | `toolchains/llvm/prebuilt/linux-arm64` | `prebuilt/linux-arm64/bin` |
+| **`armv7a-linux-androideabi`** | `toolchains/llvm/prebuilt/linux-arm` | `prebuilt/linux-arm/bin` |
+| **`x86_64-linux-android`** | `toolchains/llvm/prebuilt/linux-x86_64` | `prebuilt/linux-x86_64/bin` |
+| **`i686-linux-android`** | `toolchains/llvm/prebuilt/linux-x86` | `prebuilt/linux-x86/bin` |
+
 ```
 android-ndk-rXX/
 ├── build/
 │   ├── cmake/
-│   │   ├── android.toolchain.cmake       <-- Patched for linux-arm64 / Bionic
+│   │   ├── android.toolchain.cmake       <-- Configured for all host architectures
 │   │   └── android-legacy.toolchain.cmake
 │   └── tools/
-│       └── ndk_bin_common.sh             <-- Patched HOST_ARCH for aarch64
+│       └── ndk_bin_common.sh             <-- Host architecture detection
 ├── prebuilt/
-│   ├── linux-arm64/                      <-- Replaced with native ARM64 make, yasm
-│   ├── linux-aarch64 -> linux-arm64      <-- Compatibility symlink
-│   └── linux-x86_64 -> linux-arm64       <-- Compatibility symlink
+│   ├── <host_tag>/                       <-- Native GNU Make 4.4 and Yasm 1.3.0
+│   └── linux-x86_64 -> <host_tag>        <-- Compatibility symlinks
 └── toolchains/llvm/prebuilt/
-    ├── linux-arm64/
-    │   ├── bin/                          <-- ELF 64-bit AArch64 Clang/LLD/LLVM tools
-    │   ├── lib/clang/<ver>/              <-- Resource headers and target runtimes
-    │   └── sysroot/                      <-- Android headers and bionic target libs
-    ├── linux-aarch64 -> linux-arm64      <-- Symlink
-    └── linux-x86_64 -> linux-arm64       <-- Symlink
+    ├── <host_tag>/
+    │   ├── bin/                          <-- Native Clang, LLD, and LLVM binaries
+    │   ├── lib/clang/<ver>/              <-- Compiler runtime headers and builtins
+    │   └── sysroot/                      <-- Unified Android Bionic headers and multi-ABI libs:
+    │       ├── usr/include/              <-- Android Bionic API headers
+    │       └── usr/lib/
+    │           ├── aarch64-linux-android/
+    │           ├── arm-linux-androideabi/
+    │           ├── x86_64-linux-android/
+    │           ├── i686-linux-android/
+    │           └── riscv64-linux-android/
+    └── linux-x86_64 -> <host_tag>        <-- Compatibility symlinks
 ```

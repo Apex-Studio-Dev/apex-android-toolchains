@@ -1,0 +1,18 @@
+# Build and scratch directories
+build/
+*.tmp
+*.o
+*.out
+*.log
+
+# Archives and artifacts (uploaded to releases)
+build/artifacts/*.tar.xz
+build/artifacts/*.7z
+build/artifacts/*.zip
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

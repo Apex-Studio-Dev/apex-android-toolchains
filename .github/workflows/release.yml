@@ -1,0 +1,31 @@
+name: Orchestrate Toolchain Release Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Release target"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - "all"
+          - "llvm-only"
+          - "ndk-only"
+          - "r26d"
+
+permissions:
+  contents: write
+
+jobs:
+  orchestrate:
+    name: Run Orchestration
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Report Matrix
+        run: |
+          echo "Release orchestration triggered with target: ${{ inputs.target }}"
+          cat metadata/releases.yaml

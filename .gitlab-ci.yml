@@ -1,0 +1,117 @@
+# Apex Android Toolchains - GitLab CI Pipeline
+# Linux ARM64 / Bionic Toolchain Build & Release
+
+stages:
+  - prepare
+  - build-llvm
+  - verify-llvm
+  - build-ndk
+  - verify-ndk
+  - release
+
+variables:
+  PLATFORM: "bionic"
+  REPO_OWNER: "Apex-Studio-Dev"
+
+default:
+  tags:
+    - arm64
+    - linux
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - build/artifacts/
+    - .cache/
+
+# ------------------------------------------------------------------------------
+# LLVM Build Stage
+# ------------------------------------------------------------------------------
+.build_llvm_template:
+  stage: build-llvm
+  script:
+    - scripts/build-llvm.sh --revision="$REVISION" --platform="$PLATFORM"
+    - scripts/verify-llvm.sh --dir="build/$REVISION/install" --revision="$REVISION"
+    - scripts/package-llvm.sh --dir="build/$REVISION/install" --revision="$REVISION"
+  artifacts:
+    name: "llvm-$REVISION-linux-arm64"
+    paths:
+      - build/artifacts/custom-llvm-*.tar.xz
+      - build/artifacts/*.sha256
+      - build/artifacts/*.sha512
+      - build/artifacts/SHA256SUMS
+      - build/artifacts/SHA512SUMS
+    expire_in: 30 days
+
+build:llvm:r487747e:
+  extends: .build_llvm_template
+  variables:
+    REVISION: "clang-r487747e"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^llvm-r487747e/'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $TARGET_REVISION == "clang-r487747e"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+build:llvm:manual:
+  extends: .build_llvm_template
+  variables:
+    REVISION: "$TARGET_REVISION"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $TARGET_REVISION != ""'
+      when: manual
+
+# ------------------------------------------------------------------------------
+# NDK Build Stage (Strictly reuses prebuilt LLVM artifacts)
+# ------------------------------------------------------------------------------
+.build_ndk_template:
+  stage: build-ndk
+  script:
+    - scripts/build-ndk.sh --release="$RELEASE" --platform="$PLATFORM"
+    - NDK_DIR=$(find "build/ndk-$RELEASE/official-ndk" -maxdepth 1 -mindepth 1 -type d -name "android-ndk-*" | head -n 1)
+    - scripts/verify-ndk.sh --ndk="$NDK_DIR" --release="$RELEASE"
+    - scripts/package-ndk.sh --ndk="$NDK_DIR" --release="$RELEASE"
+  artifacts:
+    name: "ndk-$RELEASE-linux-arm64"
+    paths:
+      - build/artifacts/custom-android-ndk-*.tar.xz
+      - build/artifacts/*.sha256
+      - build/artifacts/*.sha512
+      - build/artifacts/SHA256SUMS
+      - build/artifacts/SHA512SUMS
+    expire_in: 30 days
+
+build:ndk:r26d:
+  extends: .build_ndk_template
+  variables:
+    RELEASE: "r26d"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^ndk-r26d/'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $TARGET_RELEASE == "r26d"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+
+build:ndk:manual:
+  extends: .build_ndk_template
+  variables:
+    RELEASE: "$TARGET_RELEASE"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $TARGET_RELEASE != ""'
+      when: manual
+
+# ------------------------------------------------------------------------------
+# Release Stage
+# ------------------------------------------------------------------------------
+release:gitlab:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^(llvm|ndk)-/'
+  script:
+    - echo "Creating release for $CI_COMMIT_TAG"
+  release:
+    name: 'Release $CI_COMMIT_TAG'
+    tag_name: '$CI_COMMIT_TAG'
+    description: 'Custom Android Toolchains release for Linux ARM64 / Bionic - $CI_COMMIT_TAG'
+    assets:
+      links:
+        - name: 'SHA256SUMS'
+          url: '${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/toolchains/${CI_COMMIT_TAG}/SHA256SUMS'

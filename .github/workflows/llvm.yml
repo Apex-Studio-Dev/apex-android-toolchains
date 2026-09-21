@@ -1,0 +1,95 @@
+name: Build LLVM/Clang (ARM64 / Bionic)
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "Exact Android Clang revision (e.g. clang-r487747e)"
+        required: true
+        default: "clang-r487747e"
+        type: choice
+        options:
+          - "clang-r487747c"
+          - "clang-r487747d"
+          - "clang-r487747e"
+          - "clang-r522817"
+          - "clang-r522817b"
+          - "clang-r522817c"
+          - "clang-r522817d"
+          - "clang-r530567b"
+          - "clang-r530567d"
+          - "clang-r530567e"
+          - "clang-r563880c"
+          - "clang-r574158c"
+      platform:
+        description: "Host execution platform"
+        required: true
+        default: "bionic"
+        type: choice
+        options:
+          - "bionic"
+          - "linux"
+  push:
+    tags:
+      - "llvm-*"
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  build-llvm:
+    name: Build LLVM ${{ inputs.revision || github.ref_name }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Determine Revision and Tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+            REV="clang-${TAG#llvm-}"
+          else
+            REV="${{ inputs.revision }}"
+            TAG="llvm-${REV#clang-}"
+          fi
+          PLATFORM="${{ inputs.platform || 'bionic' }}"
+          echo "revision=$REV" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+          echo "Building revision: $REV with tag: $TAG (Platform: $PLATFORM)"
+
+      - name: Set up QEMU & Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake xz-utils curl aria2 qemu-user-static
+
+      - name: Build LLVM/Clang
+        run: |
+          scripts/build-llvm.sh \
+            --revision="${{ steps.meta.outputs.revision }}" \
+            --platform="${{ steps.meta.outputs.platform }}" \
+            --jobs="$(nproc)"
+
+      - name: Verify LLVM ELF & Functionality
+        run: |
+          scripts/verify-llvm.sh \
+            --dir="build/${{ steps.meta.outputs.revision }}/install" \
+            --revision="${{ steps.meta.outputs.revision }}"
+
+      - name: Upload Artifact to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "LLVM ${{ steps.meta.outputs.revision }} (Linux ARM64 / Bionic)"
+          files: |
+            build/artifacts/custom-llvm-*.tar.xz
+            build/artifacts/*.sha256
+            build/artifacts/*.sha512
+            build/artifacts/SHA256SUMS
+            build/artifacts/SHA512SUMS
+          draft: false
+          prerelease: false

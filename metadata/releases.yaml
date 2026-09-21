@@ -1,0 +1,147 @@
+# Apex Android Toolchains - Unified Releases Matrix
+# Host: Linux ARM64 (aarch64)
+# Targets: Android ARM64 (aarch64-linux-android), Android ARM32 (arm-linux-androideabi)
+
+project:
+  name: "apex-android-toolchains"
+  description: "Monorepo for Custom Android LLVM/Clang and Custom Android NDK for Linux ARM64 Host"
+  host_architecture: "aarch64"
+  host_platform: "linux-arm64"
+  target_architectures:
+    - name: "Android ARM64"
+      triple: "aarch64-linux-android"
+      abi: "arm64-v8a"
+    - name: "Android ARM32"
+      triple: "arm-linux-androideabi"
+      abi: "armeabi-v7a"
+
+dependency_pipeline:
+  - step: 1
+    name: "fetch_source"
+    description: "Fetch exact AOSP llvm-project commit and downstream patches"
+  - step: 2
+    name: "build_llvm"
+    description: "Build native Linux ARM64 LLVM/Clang toolchain"
+  - step: 3
+    name: "package_llvm"
+    description: "Validate ELF AArch64 and create custom-llvm-*.tar.xz with SHA256/SHA512"
+  - step: 4
+    name: "release_llvm"
+    description: "Publish to GitHub & GitLab releases with git tag llvm-*"
+  - step: 5
+    name: "fetch_llvm_artifact"
+    description: "NDK fetches pre-released LLVM artifact without recompilation"
+  - step: 6
+    name: "assemble_ndk"
+    description: "Build host tools (make/yasm/toolbox), splice ARM64 LLVM into official NDK base"
+  - step: 7
+    name: "verify_ndk"
+    description: "Compile hello.c for aarch64-linux-android30 and arm-linux-androideabi30; check ELF headers"
+  - step: 8
+    name: "release_ndk"
+    description: "Package custom-android-ndk-*.tar.xz and publish with git tag ndk-*"
+
+matrix:
+  - ndk_release: "r26"
+    ndk_tag: "ndk-r26"
+    ndk_artifact: "custom-android-ndk-r26-linux-arm64.tar.xz"
+    llvm_revision: "clang-r487747c"
+    llvm_tag: "llvm-r487747c"
+    llvm_artifact: "custom-llvm-r487747c-linux-arm64.tar.xz"
+    llvm_major: 17
+
+  - ndk_release: "r26b"
+    ndk_tag: "ndk-r26b"
+    ndk_artifact: "custom-android-ndk-r26b-linux-arm64.tar.xz"
+    llvm_revision: "clang-r487747d"
+    llvm_tag: "llvm-r487747d"
+    llvm_artifact: "custom-llvm-r487747d-linux-arm64.tar.xz"
+    llvm_major: 17
+
+  - ndk_release: "r26c"
+    ndk_tag: "ndk-r26c"
+    ndk_artifact: "custom-android-ndk-r26c-linux-arm64.tar.xz"
+    llvm_revision: "clang-r487747e"
+    llvm_tag: "llvm-r487747e"
+    llvm_artifact: "custom-llvm-r487747e-linux-arm64.tar.xz"
+    llvm_major: 17
+
+  - ndk_release: "r26d"
+    ndk_tag: "ndk-r26d"
+    ndk_artifact: "custom-android-ndk-r26d-linux-arm64.tar.xz"
+    llvm_revision: "clang-r487747e"
+    llvm_tag: "llvm-r487747e"
+    llvm_artifact: "custom-llvm-r487747e-linux-arm64.tar.xz"
+    llvm_major: 17
+
+  - ndk_release: "r27"
+    ndk_tag: "ndk-r27"
+    ndk_artifact: "custom-android-ndk-r27-linux-arm64.tar.xz"
+    llvm_revision: "clang-r522817"
+    llvm_tag: "llvm-r522817"
+    llvm_artifact: "custom-llvm-r522817-linux-arm64.tar.xz"
+    llvm_major: 18
+
+  - ndk_release: "r27b"
+    ndk_tag: "ndk-r27b"
+    ndk_artifact: "custom-android-ndk-r27b-linux-arm64.tar.xz"
+    llvm_revision: "clang-r522817b"
+    llvm_tag: "llvm-r522817b"
+    llvm_artifact: "custom-llvm-r522817b-linux-arm64.tar.xz"
+    llvm_major: 18
+
+  - ndk_release: "r27c"
+    ndk_tag: "ndk-r27c"
+    ndk_artifact: "custom-android-ndk-r27c-linux-arm64.tar.xz"
+    llvm_revision: "clang-r522817c"
+    llvm_tag: "llvm-r522817c"
+    llvm_artifact: "custom-llvm-r522817c-linux-arm64.tar.xz"
+    llvm_major: 18
+
+  - ndk_release: "r27d"
+    ndk_tag: "ndk-r27d"
+    ndk_artifact: "custom-android-ndk-r27d-linux-arm64.tar.xz"
+    llvm_revision: "clang-r522817d"
+    llvm_tag: "llvm-r522817d"
+    llvm_artifact: "custom-llvm-r522817d-linux-arm64.tar.xz"
+    llvm_major: 18
+
+  - ndk_release: "r28"
+    ndk_tag: "ndk-r28"
+    ndk_artifact: "custom-android-ndk-r28-linux-arm64.tar.xz"
+    llvm_revision: "clang-r530567b"
+    llvm_tag: "llvm-r530567b"
+    llvm_artifact: "custom-llvm-r530567b-linux-arm64.tar.xz"
+    llvm_major: 19
+
+  - ndk_release: "r28b"
+    ndk_tag: "ndk-r28b"
+    ndk_artifact: "custom-android-ndk-r28b-linux-arm64.tar.xz"
+    llvm_revision: "clang-r530567d"
+    llvm_tag: "llvm-r530567d"
+    llvm_artifact: "custom-llvm-r530567d-linux-arm64.tar.xz"
+    llvm_major: 19
+
+  - ndk_release: "r28c"
+    ndk_tag: "ndk-r28c"
+    ndk_artifact: "custom-android-ndk-r28c-linux-arm64.tar.xz"
+    llvm_revision: "clang-r530567e"
+    llvm_tag: "llvm-r530567e"
+    llvm_artifact: "custom-llvm-r530567e-linux-arm64.tar.xz"
+    llvm_major: 19
+
+  - ndk_release: "r29"
+    ndk_tag: "ndk-r29"
+    ndk_artifact: "custom-android-ndk-r29-linux-arm64.tar.xz"
+    llvm_revision: "clang-r563880c"
+    llvm_tag: "llvm-r563880c"
+    llvm_artifact: "custom-llvm-r563880c-linux-arm64.tar.xz"
+    llvm_major: 21
+
+  - ndk_release: "r30"
+    ndk_tag: "ndk-r30"
+    ndk_artifact: "custom-android-ndk-r30-linux-arm64.tar.xz"
+    llvm_revision: "clang-r574158c"
+    llvm_tag: "llvm-r574158c"
+    llvm_artifact: "custom-llvm-r574158c-linux-arm64.tar.xz"
+    llvm_major: 21

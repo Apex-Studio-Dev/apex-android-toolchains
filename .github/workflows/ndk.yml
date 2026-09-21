@@ -1,0 +1,105 @@
+name: Build Custom Android NDK (ARM64 / Bionic)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Android NDK Release version"
+        required: true
+        default: "r26d"
+        type: choice
+        options:
+          - "r26"
+          - "r26b"
+          - "r26c"
+          - "r26d"
+          - "r27"
+          - "r27b"
+          - "r27c"
+          - "r27d"
+          - "r28"
+          - "r28b"
+          - "r28c"
+          - "r29"
+          - "r30"
+      platform:
+        description: "Host execution platform"
+        required: true
+        default: "bionic"
+        type: choice
+        options:
+          - "bionic"
+          - "linux"
+      rebuild_llvm:
+        description: "Force local compilation of LLVM instead of using released artifact"
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - "ndk-*"
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  build-ndk:
+    name: Build NDK ${{ inputs.release || github.ref_name }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Determine Release and Tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${{ github.ref_name }}"
+            REL="${TAG#ndk-}"
+          else
+            REL="${{ inputs.release }}"
+            TAG="ndk-$REL"
+          fi
+          PLATFORM="${{ inputs.platform || 'bionic' }}"
+          REBUILD="${{ inputs.rebuild_llvm || false }}"
+          echo "release=$REL" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+          echo "rebuild_llvm=$REBUILD" >> "$GITHUB_OUTPUT"
+          echo "Assembling NDK: $REL with tag: $TAG (Platform: $PLATFORM)"
+
+      - name: Set up Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 xz-utils curl file binutils qemu-user-static
+
+      - name: Build / Assemble Custom NDK
+        run: |
+          ARGS=( "--release=${{ steps.meta.outputs.release }}" "--platform=${{ steps.meta.outputs.platform }}" )
+          if [ "${{ steps.meta.outputs.rebuild_llvm }}" = "true" ]; then
+            ARGS+=( "--rebuild-llvm" )
+          fi
+          scripts/build-ndk.sh "${ARGS[@]}"
+
+      - name: Verify Cross-Compilation (ARM64 & ARM32)
+        run: |
+          NDK_DIR="$(find build/ndk-${{ steps.meta.outputs.release }}/official-ndk -maxdepth 1 -mindepth 1 -type d -name 'android-ndk-*' | head -n 1)"
+          scripts/verify-ndk.sh \
+            --ndk="$NDK_DIR" \
+            --release="${{ steps.meta.outputs.release }}"
+
+      - name: Upload Artifact to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "Custom Android NDK ${{ steps.meta.outputs.release }} (Linux ARM64 / Bionic)"
+          files: |
+            build/artifacts/custom-android-ndk-*.tar.xz
+            build/artifacts/*.sha256
+            build/artifacts/*.sha512
+            build/artifacts/SHA256SUMS
+            build/artifacts/SHA512SUMS
+          draft: false
+          prerelease: false

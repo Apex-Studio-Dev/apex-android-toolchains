@@ -1,0 +1,151 @@
+# Apex Android Toolchains - LLVM Releases Metadata
+# Exact Android Clang revisions, git commits, manifests, and artifacts
+version: 1
+
+llvm_project_repo: "https://android.googlesource.com/toolchain/llvm-project"
+llvm_android_repo: "https://android.googlesource.com/toolchain/llvm_android"
+
+releases:
+  - revision: "clang-r487747c"
+    tag: "llvm-r487747c"
+    llvm_major: 17
+    llvm_version: "17.0.2"
+    llvm_project_commit: "d9f89f4d16663d5012e5c09495f3b30ece3d2362"
+    llvm_android_commit: "8443a75fcd5c80245b194f6510b98a11098fe7fe"
+    manifest_id: "manifest_10087095.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r487747c-linux-arm64.tar.xz"
+    ndk_releases: ["r26"]
+
+  - revision: "clang-r487747d"
+    tag: "llvm-r487747d"
+    llvm_major: 17
+    llvm_version: "17.0.2"
+    llvm_project_commit: "d9f89f4d16663d5012e5c09495f3b30ece3d2362"
+    llvm_android_commit: "56a5097db0d7057c2d011dad8550cb3f3c7e9103"
+    manifest_id: "manifest_10552028.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r487747d-linux-arm64.tar.xz"
+    ndk_releases: ["r26b"]
+
+  - revision: "clang-r487747e"
+    tag: "llvm-r487747e"
+    llvm_major: 17
+    llvm_version: "17.0.2"
+    llvm_project_commit: "d9f89f4d16663d5012e5c09495f3b30ece3d2362"
+    llvm_android_commit: "0f058ab00ec6c9b8b39956c1393bcc405a5498d3"
+    manifest_id: "manifest_11349228.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r487747e-linux-arm64.tar.xz"
+    ndk_releases: ["r26c", "r26d"]
+
+  - revision: "clang-r522817"
+    tag: "llvm-r522817"
+    llvm_major: 18
+    llvm_version: "18.0.1"
+    llvm_project_commit: "d8003a456d14a3deb8054cdaa529ffbf02d9b262"
+    llvm_android_commit: "5ab132bd1afa945695853fa093dfcc839e45f97c"
+    manifest_id: "manifest_12027248.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r522817-linux-arm64.tar.xz"
+    ndk_releases: ["r27"]
+
+  - revision: "clang-r522817b"
+    tag: "llvm-r522817b"
+    llvm_major: 18
+    llvm_version: "18.0.2"
+    llvm_project_commit: "d8003a456d14a3deb8054cdaa529ffbf02d9b262"
+    llvm_android_commit: "2a4ee244d6dd0dcb8365590b898f7a40ec3cb87a"
+    manifest_id: "manifest_12285214.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r522817b-linux-arm64.tar.xz"
+    ndk_releases: ["r27b"]
+
+  - revision: "clang-r522817c"
+    tag: "llvm-r522817c"
+    llvm_major: 18
+    llvm_version: "18.0.3"
+    llvm_project_commit: "d8003a456d14a3deb8054cdaa529ffbf02d9b262"
+    llvm_android_commit: "31a1d3747b77b10185c0adf03ae6036b474719c7"
+    manifest_id: "manifest_12470979.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r522817c-linux-arm64.tar.xz"
+    ndk_releases: ["r27c"]
+
+  - revision: "clang-r522817d"
+    tag: "llvm-r522817d"
+    llvm_major: 18
+    llvm_version: "18.0.4"
+    llvm_project_commit: "d8003a456d14a3deb8054cdaa529ffbf02d9b262"
+    llvm_android_commit: "3503453cd6ccac933b4a1ec5255b7fc29851ea6b"
+    manifest_id: "manifest_13691557.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r522817d-linux-arm64.tar.xz"
+    ndk_releases: ["r27d"]
+
+  - revision: "clang-r530567b"
+    tag: "llvm-r530567b"
+    llvm_major: 19
+    llvm_version: "19.0.0"
+    llvm_project_commit: "97a699bf4812a18fb657c2779f5296a4ab2694d2"
+    llvm_android_commit: "8dfdf1fc93652ba216e3bcea41bbcd124f1185a5"
+    manifest_id: "manifest_12642944.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r530567b-linux-arm64.tar.xz"
+    ndk_releases: ["r28"]
+
+  - revision: "clang-r530567d"
+    tag: "llvm-r530567d"
+    llvm_major: 19
+    llvm_version: "19.0.0"
+    llvm_project_commit: "97a699bf4812a18fb657c2779f5296a4ab2694d2"
+    llvm_android_commit: "4de061b7b428ebac7a6f71abe1cf2d03ebb00ee5"
+    manifest_id: "manifest_13324770.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r530567d-linux-arm64.tar.xz"
+    ndk_releases: ["r28b"]
+
+  - revision: "clang-r530567e"
+    tag: "llvm-r530567e"
+    llvm_major: 19
+    llvm_version: "19.0.1"
+    llvm_project_commit: "97a699bf4812a18fb657c2779f5296a4ab2694d2"
+    llvm_android_commit: "e727bfb014bd436f581a66a450c939a6983a1fc3"
+    manifest_id: "manifest_13624864.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r530567e-linux-arm64.tar.xz"
+    ndk_releases: ["r28c"]
+
+  - revision: "clang-r563880c"
+    tag: "llvm-r563880c"
+    llvm_major: 21
+    llvm_version: "21.0.0"
+    llvm_project_commit: "5e96669f06077099aa41290cdb4c5e6fa0f59349"
+    llvm_android_commit: "1dab3288f660d43a6cb2479107e2b54b3ab0a2a1"
+    manifest_id: "manifest_13989888.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r563880c-linux-arm64.tar.xz"
+    ndk_releases: ["r29"]
+
+  - revision: "clang-r574158c"
+    tag: "llvm-r574158c"
+    llvm_major: 21
+    llvm_version: "21.0.0"
+    llvm_project_commit: "9f872551d3c681d06fd303b36f16ed5c274735eb"
+    llvm_android_commit: "9e20ac0b949feedcfe3da791189310f6ebcbc7a8"
+    manifest_id: "manifest_16134705.xml"
+    targets: ["AArch64", "ARM"]
+    projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
+    artifact: "custom-llvm-r574158c-linux-arm64.tar.xz"
+    ndk_releases: ["r30"]

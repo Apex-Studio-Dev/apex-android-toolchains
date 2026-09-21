@@ -1,0 +1,44 @@
+name: Verification Test Suite
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      target_ndk:
+        description: "Target NDK to test"
+        default: "r26d"
+        type: string
+
+jobs:
+  verify:
+    name: Verify Toolchain Integrity
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Set up Environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 xz-utils curl file binutils
+
+      - name: Fetch and Verify LLVM Artifact
+        run: |
+          scripts/fetch-llvm.sh --revision=clang-r487747e --artifact-only || true
+          if [ -f build/artifacts/custom-llvm-r487747e-linux-arm64.tar.xz ]; then
+            mkdir -p build/test-verify
+            tar -xf build/artifacts/custom-llvm-r487747e-linux-arm64.tar.xz -C build/test-verify --strip-components=1
+            scripts/verify-llvm.sh --dir=build/test-verify --revision=clang-r487747e
+          fi
+
+      - name: Test Metadata Integrity
+        run: |
+          python3 -c "
+          import yaml
+          for f in ['metadata/llvm-releases.yaml', 'metadata/ndk-releases.yaml', 'metadata/releases.yaml']:
+              with open(f) as fp:
+                  data = yaml.safe_load(fp)
+                  assert len(data) > 0, f'{f} is empty'
+              print(f'PASS: {f} syntax and content valid')
+          "

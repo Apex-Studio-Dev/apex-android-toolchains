@@ -42,9 +42,10 @@ RUN arch="$(uname -m)"; \
         apt-get update && apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
-            gcc-multilib g++-multilib \
-            libc6-arm64-cross libstdc++-14-dev-arm64-cross \
-            libc6-armhf-cross libstdc++-14-dev-armhf-cross \
+            gcc-i686-linux-gnu g++-i686-linux-gnu \
+            libc6-arm64-cross \
+            libc6-armhf-cross \
+            libc6-i386-cross \
         && rm -rf /var/lib/apt/lists/*; \
     else \
         apt-get update && apt-get install -y --no-install-recommends \

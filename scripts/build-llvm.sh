@@ -134,33 +134,74 @@ LLVM_AND="$SRC_DIR/llvm_android"
 log "Checking and applying Android downstream patches..."
 if [ -d "$LLVM_AND/patches" ] && [ -f "$LLVM_AND/patches/PATCHES.json" ]; then
     python3 -c "
-import json, os, subprocess
+import json, os, subprocess, re
 
 patches_json = '$LLVM_AND/patches/PATCHES.json'
 src_dir = '$LLVM_SRC'
 patches_dir = '$LLVM_AND/patches'
+revision = '$REVISION_CLEAN'
+
+match = re.search(r'r(\d+)', revision)
+svn_rev = int(match.group(1)) if match else None
+
+# Ensure working tree in llvm-project is clean before patching
+subprocess.run(['git', '-C', src_dir, 'reset', '--hard', 'HEAD'], capture_output=True)
+subprocess.run(['git', '-C', src_dir, 'clean', '-fd'], capture_output=True)
 
 try:
     with open(patches_json) as f:
         patches = json.load(f)
-    print(f'Found {len(patches)} patches in PATCHES.json')
+    print(f'Found {len(patches)} total patches in metadata for {revision} (SVN: {svn_rev})')
     applied = 0
+    excluded_range = 0
+    already_applied = 0
+    failed = 0
+
     for entry in patches:
         rel_path = entry.get('rel_patch_path') or entry.get('patch')
         if not rel_path:
             continue
+
+        # Check version_range filter
+        if svn_rev is not None:
+            vr = entry.get('version_range', {}) or {}
+            from_v = vr.get('from')
+            until_v = vr.get('until')
+            from_v = 0 if from_v is None else from_v
+            until_v = float('inf') if until_v is None else until_v
+            if not (from_v <= svn_rev < until_v):
+                excluded_range += 1
+                continue
+
+        # Check platforms filter
+        platforms = entry.get('platforms', ['android'])
+        if platforms and 'android' not in platforms:
+            continue
+
         patch_file = os.path.join(patches_dir, rel_path)
         if not os.path.isfile(patch_file):
             continue
+
         # Check if already applied
         check = subprocess.run(['git', '-C', src_dir, 'apply', '--check', '--reverse', patch_file], capture_output=True)
         if check.returncode == 0:
+            already_applied += 1
             continue
-        # Try to apply
-        res = subprocess.run(['git', '-C', src_dir, 'apply', '-v', patch_file], capture_output=True, text=True)
-        if res.returncode == 0:
-            applied += 1
-    print(f'Applied {applied} patches to llvm-project.')
+
+        # Check if it applies cleanly
+        can_apply = subprocess.run(['git', '-C', src_dir, 'apply', '--check', patch_file], capture_output=True)
+        if can_apply.returncode == 0:
+            res = subprocess.run(['git', '-C', src_dir, 'apply', '-v', patch_file], capture_output=True, text=True)
+            if res.returncode == 0:
+                applied += 1
+            else:
+                print(f'Warning: patch failed {rel_path}: {res.stderr}')
+                failed += 1
+        else:
+            print(f'Notice: patch {rel_path} cannot be applied cleanly; skipping.')
+            failed += 1
+
+    print(f'Patch summary: {applied} applied, {already_applied} already applied, {excluded_range} excluded by version_range, {failed} skipped.')
 except Exception as e:
     print('Patch manager notice:', e)
 " || true

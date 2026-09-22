@@ -15,6 +15,7 @@ METADATA_FILE="$ROOT_DIR/metadata/llvm-releases.yaml"
 REVISION=""
 MODE="auto"           # auto | artifact | source
 PLATFORM="${PLATFORM:-bionic}"   # bionic | linux
+TARGET="${TARGET:-aarch64-linux-android}"
 DEST_DIR=""
 REPO_OWNER="${REPO_OWNER:-Apex-Studio-Dev}"
 FALLBACK_OWNER="HomuHomu833"
@@ -29,6 +30,7 @@ Usage: $0 --revision=<rev> [options]
 
 Options:
   --revision=<name>    LLVM revision (e.g. clang-r487747e or llvm-r487747e)
+  --target=<triple>    Host target triple (default: aarch64-linux-android)
   --platform=<plat>    Host platform: bionic (default) | linux
   --artifact-only      Only attempt to fetch release artifact
   --source-only        Only fetch exact source from AOSP
@@ -43,6 +45,8 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --revision=*) REVISION="${1#*=}" ;;
         --revision) shift; REVISION="$1" ;;
+        --target=*) TARGET="${1#*=}" ;;
+        --target) shift; TARGET="$1" ;;
         --platform=*) PLATFORM="${1#*=}" ;;
         --platform) shift; PLATFORM="$1" ;;
         --artifact-only) MODE="artifact" ;;
@@ -58,6 +62,15 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$REVISION" ] || { err "Revision is required (--revision=<name>)"; usage; }
+
+# Canonicalize target architecture
+case "$TARGET" in
+    aarch64*|arm64*|linux-arm64) TARGET_CANONICAL="aarch64-linux-android" ;;
+    arm*|linux-arm)              TARGET_CANONICAL="armv7a-linux-androideabi" ;;
+    x86_64*|amd64*|linux-x86_64) TARGET_CANONICAL="x86_64-linux-android" ;;
+    i*86*|x86*|linux-x86)        TARGET_CANONICAL="i686-linux-android" ;;
+    *)                           TARGET_CANONICAL="$TARGET" ;;
+esac
 
 # Normalize revision name (remove llvm- prefix if present)
 REVISION_CLEAN="${REVISION#llvm-}"
@@ -126,35 +139,67 @@ log "Found metadata: LLVM $LLVM_VER (llvm-project: $LLVM_PROJ_COMMIT, llvm_andro
 
 fetch_artifact() {
     local target_tag="$TAG_NAME"
-    local artifact_file="$ARTIFACT_NAME"
-    local out_path="$ROOT_DIR/build/artifacts/$artifact_file"
-    mkdir -p "$(dirname "$out_path")"
-
-    if [ -f "$out_path" ]; then
-        log "Artifact already exists locally: $out_path"
-        return 0
+    local candidates=()
+    candidates+=( "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" )
+    if [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
+        candidates+=( "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" )
+        if [ -n "$ARTIFACT_NAME" ] && [ "$ARTIFACT_NAME" != "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" ] && [ "$ARTIFACT_NAME" != "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" ]; then
+            candidates+=( "$ARTIFACT_NAME" )
+        fi
     fi
 
-    # Try downloading from Apex-Studio-Dev release first, then fallback
-    local urls=(
-        "https://github.com/${REPO_OWNER}/apex-android-toolchains/releases/download/${target_tag}/${artifact_file}"
-        "https://gitlab.com/${REPO_OWNER}/apex-android-toolchains/-/releases/${target_tag}/downloads/${artifact_file}"
-        "https://github.com/${FALLBACK_OWNER}/llvm-custom/releases/download/${target_tag}/${artifact_file}"
-        "https://github.com/${FALLBACK_OWNER}/llvm-custom/releases/download/llvm-r26/bolt%2Bclang%2Bclang-tools-extra%2Blld%2Bpolly-r26d-aarch64-linux-musl.tar.xz"
-        "https://github.com/${FALLBACK_OWNER}/llvm-custom/releases/download/llvm-r26/bolt%2Bclang%2Bclang-tools-extra%2Blld%2Bpolly-r26d-aarch64-linux-android.tar.xz"
-    )
-
-    log "Attempting to fetch released artifact..."
-    for u in "${urls[@]}"; do
-        log "Checking: $u"
-        if curl -fsSL -o "$out_path.tmp" "$u" 2>/dev/null || (command -v aria2c >/dev/null && aria2c -q --allow-overwrite=true -o "$out_path.tmp" "$u"); then
-            mv "$out_path.tmp" "$out_path"
-            log "Successfully downloaded artifact to $out_path"
+    # 1. Check if artifact already exists locally
+    for art in "${candidates[@]}"; do
+        local check_path="$ROOT_DIR/build/artifacts/$art"
+        if [ -f "$check_path" ]; then
+            log "Artifact already exists locally: $check_path"
+            if [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
+                (
+                    cd "$ROOT_DIR/build/artifacts"
+                    ln -sf "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" 2>/dev/null || true
+                    ln -sf "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" 2>/dev/null || true
+                )
+            fi
             return 0
         fi
     done
 
-    rm -f "$out_path.tmp"
+    # 2. Try downloading candidates from releases
+    log "Attempting to fetch released artifact for $TARGET_CANONICAL..."
+    for art in "${candidates[@]}"; do
+        local out_path="$ROOT_DIR/build/artifacts/$art"
+        mkdir -p "$(dirname "$out_path")"
+
+        local urls=(
+            "https://github.com/${REPO_OWNER}/apex-android-toolchains/releases/download/${target_tag}/${art}"
+            "https://gitlab.com/${REPO_OWNER}/apex-android-toolchains/-/releases/${target_tag}/downloads/${art}"
+            "https://github.com/${FALLBACK_OWNER}/llvm-custom/releases/download/${target_tag}/${art}"
+        )
+        if [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
+            urls+=(
+                "https://github.com/${FALLBACK_OWNER}/llvm-custom/releases/download/llvm-r26/bolt%2Bclang%2Bclang-tools-extra%2Blld%2Bpolly-r26d-aarch64-linux-musl.tar.xz"
+                "https://github.com/${FALLBACK_OWNER}/llvm-custom/releases/download/llvm-r26/bolt%2Bclang%2Bclang-tools-extra%2Blld%2Bpolly-r26d-aarch64-linux-android.tar.xz"
+            )
+        fi
+
+        for u in "${urls[@]}"; do
+            log "Checking: $u"
+            if curl -fsSL -o "$out_path.tmp" "$u" 2>/dev/null || (command -v aria2c >/dev/null && aria2c -q --allow-overwrite=true -o "$out_path.tmp" "$u" 2>/dev/null); then
+                mv "$out_path.tmp" "$out_path"
+                log "Successfully downloaded artifact to $out_path"
+                if [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
+                    (
+                        cd "$ROOT_DIR/build/artifacts"
+                        ln -sf "$art" "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" 2>/dev/null || true
+                        ln -sf "$art" "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" 2>/dev/null || true
+                    )
+                fi
+                return 0
+            fi
+        done
+        rm -f "$out_path.tmp"
+    done
+
     return 1
 }
 

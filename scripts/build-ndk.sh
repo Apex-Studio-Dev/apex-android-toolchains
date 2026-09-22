@@ -177,7 +177,7 @@ fi
 
 if [ ! -f "$LLVM_TAR" ]; then
     log "LLVM artifact not found locally. Fetching pre-released artifact for $TARGET_CANONICAL..."
-    if ! "$SCRIPT_DIR/fetch-llvm.sh" --revision="$REQUIRED_LLVM" --artifact-only --platform="$PLATFORM"; then
+    if ! "$SCRIPT_DIR/fetch-llvm.sh" --revision="$REQUIRED_LLVM" --target="$TARGET_CANONICAL" --artifact-only --platform="$PLATFORM"; then
         if [ "$REBUILD_LLVM" = false ]; then
             warn "LLVM artifact not found in releases. Falling back to build-llvm.sh..."
             "$SCRIPT_DIR/build-llvm.sh" --revision="$REQUIRED_LLVM" --target="$TARGET_CANONICAL" --platform="$PLATFORM" --jobs="$JOBS"
@@ -185,12 +185,16 @@ if [ ! -f "$LLVM_TAR" ]; then
     fi
 fi
 
+if [ ! -f "$LLVM_TAR" ] && [ "$TARGET_CANONICAL" = "aarch64-linux-android" ] && [ -f "$ROOT_DIR/build/artifacts/custom-llvm-${REQUIRED_LLVM#clang-}-linux-arm64.tar.xz" ]; then
+    LLVM_TAR="$ROOT_DIR/build/artifacts/custom-llvm-${REQUIRED_LLVM#clang-}-linux-arm64.tar.xz"
+fi
+
 if [ ! -f "$LLVM_TAR" ]; then
     err "LLVM artifact $LLVM_TAR is missing and could not be prepared!"
     exit 1
 fi
 
-log "Unpacking LLVM artifact $LLVM_ARTIFACT..."
+log "Unpacking LLVM artifact $(basename "$LLVM_TAR")..."
 rm -rf "$HOST_LLVM_DIR"
 mkdir -p "$HOST_LLVM_DIR"
 tar -xf "$LLVM_TAR" -C "$HOST_LLVM_DIR" --strip-components=1
@@ -220,8 +224,8 @@ NDK_ROOT="$(find "$NDK_UNPACK_DIR" -maxdepth 1 -mindepth 1 -type d -name 'androi
 NDK_TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
 PREBUILT_BIN="$NDK_ROOT/prebuilt/linux-x86_64/bin"
 
-# 4. Build host tools natively for ARM64 (make, yasm, toolbox)
-log "Building native host tools (GNU make, yasm) for ARM64..."
+# 4. Build host tools natively for target architecture (make, yasm, toolbox)
+log "Building native host tools (GNU make, yasm) for $TARGET_CANONICAL..."
 HOST_TOOLS_DIR="$WORK_DIR/host-tools"
 mkdir -p "$HOST_TOOLS_DIR/bin"
 
@@ -246,25 +250,28 @@ if [ ! -f "$HOST_TOOLS_DIR/bin/make" ]; then
         fetch_source "$MAKE_TAR" "https://ftp.gnu.org/gnu/make/make-4.4.tar.gz" || true
     fi
     if [ -f "$MAKE_TAR" ]; then
-        log "Compiling native GNU Make 4.4 for ARM64..."
+        log "Compiling native GNU Make 4.4 for $TARGET_CANONICAL..."
         (
             cd "$WORK_DIR"
             rm -rf make-4.4
             tar -xzf "$MAKE_TAR"
             cd make-4.4
             CONF_ARGS=( --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC" )
-            if [ "$(uname -m)" != "aarch64" ]; then
-                if command -v aarch64-linux-gnu-gcc >/dev/null; then
-                    CONF_ARGS+=( --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc )
-                elif command -v zig >/dev/null; then
-                    CONF_ARGS+=( --host=aarch64-linux-musl CC="zig cc -target aarch64-linux-musl" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
-                fi
+            if command -v zig >/dev/null; then
+                CONF_ARGS+=( --host="$TARGET_CANONICAL" CC="zig cc -target $ZIG_TARGET" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
+            elif [ "$(uname -m)" != "$TARGET_ARCH" ]; then
+                case "$TARGET_ARCH" in
+                    arm64)  command -v aarch64-linux-gnu-gcc >/dev/null && CONF_ARGS+=( --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc ) ;;
+                    arm)    command -v arm-linux-gnueabihf-gcc >/dev/null && CONF_ARGS+=( --host=arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc ) ;;
+                    x86)    command -v i686-linux-gnu-gcc >/dev/null && CONF_ARGS+=( --host=i686-linux-gnu CC=i686-linux-gnu-gcc ) ;;
+                    x86_64) [ "$(uname -m)" != "x86_64" ] && command -v x86_64-linux-gnu-gcc >/dev/null && CONF_ARGS+=( --host=x86_64-linux-gnu CC=x86_64-linux-gnu-gcc ) ;;
+                esac
             fi
             ./configure "${CONF_ARGS[@]}"
             make -j"$JOBS"
             make install
         )
-    elif [ "$(uname -m)" = "aarch64" ] && command -v make >/dev/null; then
+    elif [ "$(uname -m)" = "$TARGET_ARCH" ] && command -v make >/dev/null; then
         cp "$(command -v make)" "$HOST_TOOLS_DIR/bin/make"
     fi
 fi

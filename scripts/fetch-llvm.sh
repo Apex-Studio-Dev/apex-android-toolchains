@@ -18,7 +18,6 @@ PLATFORM="${PLATFORM:-bionic}"   # bionic | linux
 TARGET="${TARGET:-aarch64-linux-android}"
 DEST_DIR=""
 REPO_OWNER="${REPO_OWNER:-Apex-Studio-Dev}"
-FALLBACK_OWNER="HomuHomu833"
 
 log() { printf '\033[1;32m[fetch-llvm]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[fetch-llvm WARNING]\033[0m %s\n' "$*"; }
@@ -170,26 +169,9 @@ fetch_artifact() {
         local out_path="$ROOT_DIR/build/artifacts/$art"
         mkdir -p "$(dirname "$out_path")"
 
-        local homu_tag=""
-        local homu_rev=""
-        case "$REVISION_CLEAN" in
-            clang-r487747*) homu_tag="llvm-r26"; homu_rev="r26d" ;;
-            clang-r522817*) homu_tag="llvm-r27"; homu_rev="r27d" ;;
-            clang-r530567*) homu_tag="llvm-r28"; homu_rev="r28c" ;;
-            clang-r563880*) homu_tag="llvm-r29"; homu_rev="r29" ;;
-            clang-r574158*) homu_tag="llvm-r30"; homu_rev="r30" ;;
-        esac
-
-        local urls=()
-        if [ -n "$homu_tag" ]; then
-            urls+=(
-                "https://github.com/${FALLBACK_OWNER}/llvm-custom/releases/download/${homu_tag}/bolt%2Bclang%2Bclang-tools-extra%2Blld%2Bpolly-${homu_rev}-${TARGET_CANONICAL}.tar.xz"
-            )
-        fi
-        urls+=(
+        local urls=(
             "https://github.com/${REPO_OWNER}/apex-android-toolchains/releases/download/${target_tag}/${art}"
             "https://gitlab.com/${REPO_OWNER}/apex-android-toolchains/-/releases/${target_tag}/downloads/${art}"
-            "https://github.com/${FALLBACK_OWNER}/llvm-custom/releases/download/${target_tag}/${art}"
         )
 
         for u in "${urls[@]}"; do

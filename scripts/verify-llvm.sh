@@ -100,6 +100,20 @@ if ! echo "$FILE_OUT" | grep -Eq "$FILE_PATTERN"; then
 fi
 log "PASS: Binary matches expected architecture pattern ($FILE_PATTERN)"
 
+# Validate ELF linkage (prevent glibc dynamic linker from masquerading as Android toolchain)
+if echo "$FILE_OUT" | grep -Eq "interpreter /lib/ld-linux"; then
+    err "FAIL: $CLANG is dynamically linked against GNU/glibc interpreter (/lib/ld-linux)!"
+    err "On Android/Termux, this causes immediate 'no such file or directory' errors because /lib/ld-linux does not exist."
+    err "Android/Bionic LLVM binaries must be statically linked."
+    exit 1
+fi
+
+IS_STATIC=false
+if echo "$FILE_OUT" | grep -q "statically linked"; then
+    IS_STATIC=true
+    log "PASS: Binary is statically linked (100% portable for Android Termux & Linux)"
+fi
+
 # 2. Validate ELF header with `readelf -h`
 log "Checking ELF header with 'readelf -h'..."
 READELF_OUT="$(readelf -h "$CLANG")"
@@ -123,47 +137,71 @@ EXEC_WRAPPER=()
 case "$TARGET" in
     arm*|linux-arm)
         if [ "$HOST_ARCH" != "arm" ] && [ "$HOST_ARCH" != "armv7l" ]; then
-            for p in "/usr/arm-linux-gnueabihf" "/usr/arm-linux-gnueabi"; do
-                if [ -d "$p" ]; then
-                    export QEMU_LD_PREFIX="$p"
-                    export LD_LIBRARY_PATH="$p/lib:$p/usr/lib:${LD_LIBRARY_PATH:-}"
-                    if command -v qemu-arm-static >/dev/null; then
-                        EXEC_WRAPPER=( "qemu-arm-static" "-L" "$p" )
-                    elif command -v qemu-arm >/dev/null; then
-                        EXEC_WRAPPER=( "qemu-arm" "-L" "$p" )
-                    fi
-                    break
+            if [ "$IS_STATIC" = true ]; then
+                if command -v qemu-arm-static >/dev/null; then
+                    EXEC_WRAPPER=( "qemu-arm-static" )
+                elif command -v qemu-arm >/dev/null; then
+                    EXEC_WRAPPER=( "qemu-arm" )
                 fi
-            done
+            else
+                for p in "/usr/arm-linux-gnueabihf" "/usr/arm-linux-gnueabi"; do
+                    if [ -d "$p" ]; then
+                        export QEMU_LD_PREFIX="$p"
+                        export LD_LIBRARY_PATH="$p/lib:$p/usr/lib:${LD_LIBRARY_PATH:-}"
+                        if command -v qemu-arm-static >/dev/null; then
+                            EXEC_WRAPPER=( "qemu-arm-static" "-L" "$p" )
+                        elif command -v qemu-arm >/dev/null; then
+                            EXEC_WRAPPER=( "qemu-arm" "-L" "$p" )
+                        fi
+                        break
+                    fi
+                done
+            fi
         fi
         ;;
     aarch64*|arm64*|linux-arm64)
         if [ "$HOST_ARCH" != "aarch64" ]; then
-            if [ -d "/usr/aarch64-linux-gnu" ]; then
-                export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
-                export LD_LIBRARY_PATH="/usr/aarch64-linux-gnu/lib:/usr/aarch64-linux-gnu/usr/lib:${LD_LIBRARY_PATH:-}"
+            if [ "$IS_STATIC" = true ]; then
                 if command -v qemu-aarch64-static >/dev/null; then
-                    EXEC_WRAPPER=( "qemu-aarch64-static" "-L" "/usr/aarch64-linux-gnu" )
+                    EXEC_WRAPPER=( "qemu-aarch64-static" )
                 elif command -v qemu-aarch64 >/dev/null; then
-                    EXEC_WRAPPER=( "qemu-aarch64" "-L" "/usr/aarch64-linux-gnu" )
+                    EXEC_WRAPPER=( "qemu-aarch64" )
+                fi
+            else
+                if [ -d "/usr/aarch64-linux-gnu" ]; then
+                    export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
+                    export LD_LIBRARY_PATH="/usr/aarch64-linux-gnu/lib:/usr/aarch64-linux-gnu/usr/lib:${LD_LIBRARY_PATH:-}"
+                    if command -v qemu-aarch64-static >/dev/null; then
+                        EXEC_WRAPPER=( "qemu-aarch64-static" "-L" "/usr/aarch64-linux-gnu" )
+                    elif command -v qemu-aarch64 >/dev/null; then
+                        EXEC_WRAPPER=( "qemu-aarch64" "-L" "/usr/aarch64-linux-gnu" )
+                    fi
                 fi
             fi
         fi
         ;;
     i*86*|linux-x86|x86)
         if [ "$HOST_ARCH" != "i686" ]; then
-            for p in "/usr/i686-linux-gnu" "/usr/i386-linux-gnu"; do
-                if [ -d "$p" ]; then
-                    export QEMU_LD_PREFIX="$p"
-                    export LD_LIBRARY_PATH="$p/lib:$p/usr/lib:${LD_LIBRARY_PATH:-}"
-                    if command -v qemu-i386-static >/dev/null; then
-                        EXEC_WRAPPER=( "qemu-i386-static" "-L" "$p" )
-                    elif command -v qemu-i386 >/dev/null; then
-                        EXEC_WRAPPER=( "qemu-i386" "-L" "$p" )
-                    fi
-                    break
+            if [ "$IS_STATIC" = true ]; then
+                if command -v qemu-i386-static >/dev/null; then
+                    EXEC_WRAPPER=( "qemu-i386-static" )
+                elif command -v qemu-i386 >/dev/null; then
+                    EXEC_WRAPPER=( "qemu-i386" )
                 fi
-            done
+            else
+                for p in "/usr/i686-linux-gnu" "/usr/i386-linux-gnu"; do
+                    if [ -d "$p" ]; then
+                        export QEMU_LD_PREFIX="$p"
+                        export LD_LIBRARY_PATH="$p/lib:$p/usr/lib:${LD_LIBRARY_PATH:-}"
+                        if command -v qemu-i386-static >/dev/null; then
+                            EXEC_WRAPPER=( "qemu-i386-static" "-L" "$p" )
+                        elif command -v qemu-i386 >/dev/null; then
+                            EXEC_WRAPPER=( "qemu-i386" "-L" "$p" )
+                        fi
+                        break
+                    fi
+                done
+            fi
         fi
         ;;
 esac

@@ -316,15 +316,43 @@ if [ ! -f "$HOST_TOOLS_DIR/bin/yasm" ]; then
             rm -rf yasm-1.3.0
             tar -xzf "$YASM_TAR"
             cd yasm-1.3.0
-            CONF_ARGS=( --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC" )
-            if command -v zig >/dev/null; then
+            CONF_ARGS=( --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC -Wno-error=date-time -Wno-date-time -Wno-error" )
+            CC_CMD=""
+            HOST_FLAG=""
+            case "$TARGET_ARCH" in
+                arm64)
+                    if command -v aarch64-linux-gnu-gcc >/dev/null; then
+                        CC_CMD="aarch64-linux-gnu-gcc"
+                        HOST_FLAG="--host=aarch64-linux-gnu"
+                    fi
+                    ;;
+                arm)
+                    if command -v arm-linux-gnueabihf-gcc >/dev/null; then
+                        CC_CMD="arm-linux-gnueabihf-gcc"
+                        HOST_FLAG="--host=arm-linux-gnueabihf"
+                    fi
+                    ;;
+                x86)
+                    if command -v i686-linux-gnu-gcc >/dev/null; then
+                        CC_CMD="i686-linux-gnu-gcc"
+                        HOST_FLAG="--host=i686-linux-gnu"
+                    fi
+                    ;;
+                x86_64)
+                    if [ "$(uname -m)" = "x86_64" ] && command -v gcc >/dev/null; then
+                        CC_CMD="gcc"
+                    elif command -v x86_64-linux-gnu-gcc >/dev/null; then
+                        CC_CMD="x86_64-linux-gnu-gcc"
+                        HOST_FLAG="--host=x86_64-linux-gnu"
+                    fi
+                    ;;
+            esac
+
+            if [ -n "$CC_CMD" ]; then
+                CONF_ARGS+=( CC="$CC_CMD" )
+                [ -n "$HOST_FLAG" ] && CONF_ARGS+=( "$HOST_FLAG" )
+            elif command -v zig >/dev/null; then
                 CONF_ARGS+=( --host="$TARGET_CANONICAL" CC="zig cc -target $ZIG_TARGET" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
-            elif [ "$(uname -m)" != "$TARGET_ARCH" ]; then
-                case "$TARGET_ARCH" in
-                    arm64) command -v aarch64-linux-gnu-gcc >/dev/null && CONF_ARGS+=( --host=aarch64-linux-gnu CC=aarch64-linux-gnu-gcc ) ;;
-                    arm)   command -v arm-linux-gnueabihf-gcc >/dev/null && CONF_ARGS+=( --host=arm-linux-gnueabihf CC=arm-linux-gnueabihf-gcc ) ;;
-                    x86)   command -v i686-linux-gnu-gcc >/dev/null && CONF_ARGS+=( --host=i686-linux-gnu CC=i686-linux-gnu-gcc ) ;;
-                esac
             fi
             ./configure "${CONF_ARGS[@]}"
             make -j"$JOBS"

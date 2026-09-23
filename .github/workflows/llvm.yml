@@ -33,14 +33,6 @@ on:
           - "armv7a"
           - "x86_64"
           - "i686"
-          - "aarch64-linux-android"
-          - "armv7a-linux-androideabi"
-          - "x86_64-linux-android"
-          - "i686-linux-android"
-          - "aarch64-linux-gnu"
-          - "armv7a-linux-gnueabihf"
-          - "x86_64-linux-gnu"
-          - "i686-linux-gnu"
       platform:
         description: "Host execution platform"
         required: true

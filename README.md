@@ -72,12 +72,16 @@ Official Google Android NDK and LLVM releases only provide prebuilt host compile
 
 ### 1. Host Execution Platforms (Where the toolchain runs)
 
-| Host Architecture | Canonical Target Triple | Platform & Use Case |
-| :--- | :--- | :--- |
-| **ARM64** | `aarch64-linux-android` (`arm64-v8a`) | Modern Android smartphones, tablets, Termux |
-| **ARM32** | `armv7a-linux-androideabi` (`armeabi-v7a`) | Legacy 32-bit Android devices, embedded IoT |
-| **x86_64** | `x86_64-linux-android` | Android PC Emulators, Windows Subsystem for Android (WSA), Waydroid |
-| **x86 (32-bit)** | `i686-linux-android` | 32-bit Android PC Emulators |
+The toolchains support two distinct host OS environments:
+* **Platform Bionic (`platform=bionic`):** Native Android OS (Termux, AndroidIDE, CXXDroid, native shell), dynamically linked against Android's system Bionic libraries with static `libc++`, universal `#!/bin/sh` shebangs, and 16KB page size support.
+* **Platform Linux (`platform=linux`):** Standard GNU/Linux environments (WSL, PRoot, Ubuntu, Debian, Arch, Fedora) linked against standard glibc with static C/C++ runtimes.
+
+| Host Architecture | Platform Bionic (Android) | Platform Linux (GNU) | Primary Use Cases |
+| :--- | :--- | :--- | :--- |
+| **ARM64** | `aarch64-linux-android` | `aarch64-linux-gnu` | Modern Android phones, Termux, Raspberry Pi, ARM64 servers/WSL |
+| **ARM32** | `armv7a-linux-androideabi` | `armv7a-linux-gnueabihf` | 32-bit Android devices, embedded ARM IoT, 32-bit PRoot |
+| **x86_64** | `x86_64-linux-android` | `x86_64-linux-gnu` | Android PC Emulators, WSA, Waydroid, standard x86_64 Linux/WSL |
+| **x86 (32-bit)** | `i686-linux-android` | `i686-linux-gnu` | 32-bit Android PC emulators, legacy x86 Linux |
 
 ### 2. Multi-Target Code Generation (What the toolchain compiles for)
 
@@ -116,10 +120,12 @@ docker pull ghcr.io/apex-studio-dev/apex-toolchains-builder:latest
 Artifacts published to GitHub Releases adhere to standard naming conventions:
 
 * **LLVM Artifact:** `custom-llvm-<revision>-<target>.tar.xz`
-  *(e.g., `custom-llvm-r487747e-aarch64-linux-android.tar.xz`)*
+  *(e.g., `custom-llvm-r487747e-aarch64-linux-android.tar.xz` or `custom-llvm-r487747e-x86_64-linux-gnu.tar.xz`)*
 * **NDK Artifact:** `custom-android-ndk-<release>-<target>.tar.xz`
-  *(e.g., `custom-android-ndk-r26d-aarch64-linux-android.tar.xz`)*
-* **Target Architecture:** Strictly canonical triples (`aarch64-linux-android`, `armv7a-linux-androideabi`, `x86_64-linux-android`, `i686-linux-android`). No duplicate aliases.
+  *(e.g., `custom-android-ndk-r26d-aarch64-linux-android.tar.xz` or `custom-android-ndk-r26d-x86_64-linux-gnu.tar.xz`)*
+* **Target Triples by Host Platform:**
+  - **Platform Bionic (Android):** `aarch64-linux-android`, `armv7a-linux-androideabi`, `x86_64-linux-android`, `i686-linux-android`
+  - **Platform Linux (GNU):** `aarch64-linux-gnu`, `armv7a-linux-gnueabihf`, `x86_64-linux-gnu`, `i686-linux-gnu`
 * **Checksum File:** Each release tarball is accompanied by its individual `<artifact>.sha256` verification file.
 
 ### 1. LLVM / Clang Revisions (Exact AOSP Commits)
@@ -233,17 +239,17 @@ The workflows in [`.github/workflows/llvm.yml`](.github/workflows/llvm.yml) and 
 ### Triggering Builds via GitHub CLI
 
 ```bash
-# Build LLVM r487747e for all 4 host architectures in parallel:
-gh workflow run llvm.yml -f revision=clang-r487747e -f target=all
+# Build LLVM for all 4 Android (Bionic) architectures in parallel:
+gh workflow run llvm.yml -f revision=clang-r487747e -f target=all -f platform=bionic
 
-# Build LLVM for a specific host architecture (e.g. aarch64):
-gh workflow run llvm.yml -f revision=clang-r487747e -f target=aarch64-linux-android
+# Build LLVM for Linux ARM64 (WSL / PRoot):
+gh workflow run llvm.yml -f revision=clang-r487747e -f target=aarch64 -f platform=linux
 
-# Build Custom NDK r26d for all 4 host architectures in parallel:
-gh workflow run ndk.yml -f release=r26d -f target=all
+# Build Custom NDK r26d for all 4 Android architectures in parallel:
+gh workflow run ndk.yml -f release=r26d -f target=all -f platform=bionic
 
-# Build Custom NDK r26d for a specific host architecture:
-gh workflow run ndk.yml -f release=r26d -f target=aarch64-linux-android
+# Build Custom NDK r26d for x86_64 Linux (WSL / Ubuntu):
+gh workflow run ndk.yml -f release=r26d -f target=x86_64 -f platform=linux
 ```
 
 ### Publishing Releases via Git Tags

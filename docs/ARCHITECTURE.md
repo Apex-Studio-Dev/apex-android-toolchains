@@ -3,10 +3,17 @@
 ## Overview
 
 `apex-toolchains` is designed as an independent, reproducible toolchain monorepo providing **native execution support across Android (Bionic) and Linux (GNU) host architectures**:
-1. **`aarch64-linux-android`** (`arm64-v8a`): Modern 64-bit ARM smartphones, tablets, Termux.
-2. **`armv7a-linux-androideabi`** (`armeabi-v7a`): Legacy 32-bit ARM devices and embedded systems.
-3. **`x86_64-linux-android`**: 64-bit Android PC emulators, Windows Subsystem for Android (WSA), and Waydroid Linux.
-4. **`i686-linux-android`**: 32-bit Android PC emulators.
+
+### Supported Host Platforms
+* **Platform Bionic (`platform=bionic`):**
+  - Native Android executables linked against standard Android OS libraries (`/system/bin/linker*`, `libc.so`, `libdl.so`, `libm.so`) with static `libc++`.
+  - Kernel 16KB page-size support (`-Wl,-z,max-page-size=16384`) for Android 15+.
+  - Universal `#!/bin/sh` shebangs across all wrappers for zero dependency on `/usr/bin/env`.
+  - Targets: `aarch64-linux-android`, `armv7a-linux-androideabi`, `x86_64-linux-android`, `i686-linux-android`.
+* **Platform Linux (`platform=linux`):**
+  - Standard GNU/Linux executables for WSL, PRoot environments, and Linux distributions (Ubuntu, Debian, Arch, Fedora).
+  - Statically linked C/C++ runtimes (`-static-libgcc -static-libstdc++`) with standard glibc.
+  - Targets: `aarch64-linux-gnu`, `armv7a-linux-gnueabihf`, `x86_64-linux-gnu`, `i686-linux-gnu`.
 
 Regardless of which host executes the compiler, every compiler binary is a complete **multi-target cross-compiler** configured with `-DLLVM_TARGETS_TO_BUILD="AArch64;ARM;X86;RISCV"`, capable of compiling code for all Android ABIs.
 

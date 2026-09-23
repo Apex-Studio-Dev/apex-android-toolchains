@@ -6,11 +6,9 @@ All commits and manifests are strictly verified from official Google Android Ope
 
 ## LLVM Releases Matrix
 
-Every LLVM release produces prebuilt artifacts for all 4 Android host architectures:
-- `custom-llvm-<rev>-aarch64-linux-android.tar.xz`
-- `custom-llvm-<rev>-armv7a-linux-androideabi.tar.xz`
-- `custom-llvm-<rev>-x86_64-linux-android.tar.xz`
-- `custom-llvm-<rev>-i686-linux-android.tar.xz`
+Every LLVM release produces prebuilt artifacts for both host platforms:
+- **Platform Bionic (Android):** `custom-llvm-<rev>-<arch>-linux-android.tar.xz` (`aarch64`, `armv7a`, `x86_64`, `i686`)
+- **Platform Linux (GNU):** `custom-llvm-<rev>-<arch>-linux-gnu.tar.xz` (`aarch64`, `armv7a`, `x86_64`, `i686`)
 
 | LLVM Major | Clang Revision | Git Tag | AOSP llvm-project Commit | AOSP llvm_android Commit | AOSP Manifest | Artifact Pattern |
 | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
@@ -31,11 +29,9 @@ Every LLVM release produces prebuilt artifacts for all 4 Android host architectu
 
 ## NDK Releases Matrix
 
-Every NDK release produces prebuilt artifacts for all 4 Android host architectures:
-- `custom-android-ndk-<release>-aarch64-linux-android.tar.xz`
-- `custom-android-ndk-<release>-armv7a-linux-androideabi.tar.xz`
-- `custom-android-ndk-<release>-x86_64-linux-android.tar.xz`
-- `custom-android-ndk-<release>-i686-linux-android.tar.xz`
+Every NDK release produces prebuilt artifacts for both host platforms:
+- **Platform Bionic (Android):** `custom-android-ndk-<release>-<arch>-linux-android.tar.xz` (`aarch64`, `armv7a`, `x86_64`, `i686`)
+- **Platform Linux (GNU):** `custom-android-ndk-<release>-<arch>-linux-gnu.tar.xz` (`aarch64`, `armv7a`, `x86_64`, `i686`)
 
 | NDK Release | Git Tag | Required LLVM Revision | LLVM Tag | Official AOSP Base Archive | NDK Release Artifact Pattern |
 | :---: | :---: | :---: | :---: | :---: | :--- |

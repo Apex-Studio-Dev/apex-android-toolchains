@@ -12,24 +12,22 @@ You can trigger builds directly using the GitHub Web UI or the `gh` CLI:
 
 #### Build LLVM:
 ```bash
-# Build LLVM r487747e for all 4 host architectures in parallel:
-gh workflow run llvm.yml -f revision=clang-r487747e -f target=all
+# Build LLVM for all 4 Android (Bionic) architectures in parallel:
+gh workflow run llvm.yml -f revision=clang-r487747e -f target=all -f platform=bionic
 
-# Build LLVM for a specific host architecture:
-gh workflow run llvm.yml -f revision=clang-r487747e -f target=aarch64-linux-android
-gh workflow run llvm.yml -f revision=clang-r487747e -f target=armv7a-linux-androideabi
-gh workflow run llvm.yml -f revision=clang-r487747e -f target=x86_64-linux-android
-gh workflow run llvm.yml -f revision=clang-r487747e -f target=i686-linux-android
+# Build LLVM for Linux (glibc for WSL / PRoot / distros):
+gh workflow run llvm.yml -f revision=clang-r487747e -f target=aarch64 -f platform=linux
+gh workflow run llvm.yml -f revision=clang-r487747e -f target=x86_64 -f platform=linux
 ```
 
 #### Build Custom NDK:
 ```bash
-# Build Custom NDK r26d for all 4 host architectures in parallel:
-gh workflow run ndk.yml -f release=r26d -f target=all
+# Build Custom NDK r26d for all 4 Android (Bionic) architectures in parallel:
+gh workflow run ndk.yml -f release=r26d -f target=all -f platform=bionic
 
-# Build Custom NDK for a specific host architecture:
-gh workflow run ndk.yml -f release=r26d -f target=aarch64-linux-android
-gh workflow run ndk.yml -f release=r28c -f target=x86_64-linux-android
+# Build Custom NDK for a specific architecture on Bionic or Linux:
+gh workflow run ndk.yml -f release=r26d -f target=aarch64 -f platform=bionic
+gh workflow run ndk.yml -f release=r28c -f target=x86_64 -f platform=linux
 ```
 
 ### B. Triggering via Git Tag Push

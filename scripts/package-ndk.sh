@@ -77,8 +77,10 @@ fi
 )
 
 log "Artifact generated: $OUT_TAR"
+log "Computing cryptographic checksum (SHA256)..."
 (
     cd "$OUT_DIR"
-    sha256sum "$ARTIFACT_NAME"
+    sha256sum "$ARTIFACT_NAME" > "${ARTIFACT_NAME}.sha256"
+    cat "${ARTIFACT_NAME}.sha256"
 )
 log "NDK Packaging completed successfully!"

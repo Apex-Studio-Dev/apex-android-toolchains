@@ -229,5 +229,6 @@ jobs:
           body_path: build/RELEASE_NOTES.md
           files: |
             build/artifacts/custom-llvm-*.tar.xz
+            build/artifacts/custom-llvm-*.tar.xz.sha256
           draft: false
           prerelease: false

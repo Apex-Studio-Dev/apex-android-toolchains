@@ -231,5 +231,6 @@ jobs:
           body_path: build/RELEASE_NOTES.md
           files: |
             build/artifacts/custom-android-ndk-*.tar.xz
+            build/artifacts/custom-android-ndk-*.tar.xz.sha256
           draft: false
           prerelease: false

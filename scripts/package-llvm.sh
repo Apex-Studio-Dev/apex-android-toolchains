@@ -72,15 +72,17 @@ if [ -f "$SCRIPT_DIR/normalize-tls.py" ]; then
     python3 "$SCRIPT_DIR/normalize-tls.py" "$LLVM_DIR"
 fi
 
-# Archive using maximum compression
+# Archive using maximum compression (multithreaded LZMA2 with 256MiB dictionary)
 (
     cd "$PARENT_DIR"
-    tar -cf - "$BASE_DIR" | xz -T0 -9e > "$OUT_TAR"
+    tar -cf - "$BASE_DIR" | xz -T0 -9e --lzma2=dict=256MiB > "$OUT_TAR"
 )
 
 log "Artifact generated: $OUT_TAR"
+log "Computing cryptographic checksum (SHA256)..."
 (
     cd "$OUT_DIR"
-    sha256sum "$ARTIFACT_NAME"
+    sha256sum "$ARTIFACT_NAME" > "${ARTIFACT_NAME}.sha256"
+    cat "${ARTIFACT_NAME}.sha256"
 )
 log "Packaging completed successfully!"

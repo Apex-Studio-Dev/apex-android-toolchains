@@ -255,9 +255,9 @@ if [ "$PLATFORM" = "bionic" ]; then
     CROSS_RANLIB="$TC/bin/llvm-ranlib"
     CROSS_STRIP="$TC/bin/llvm-strip"
     CROSS_OBJCOPY="$TC/bin/llvm-objcopy"
-    CROSS_CFLAGS="-O2 -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong -static"
-    CROSS_CXXFLAGS="-O2 -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong -static"
-    CROSS_LDFLAGS="-static"
+    CROSS_CFLAGS="-O3 -flto -fdata-sections -ffunction-sections -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong -static"
+    CROSS_CXXFLAGS="-O3 -flto -fdata-sections -ffunction-sections -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong -static"
+    CROSS_LDFLAGS="-static -Wl,--gc-sections -Wl,--icf=all"
 elif command -v "${GNU_TRIPLE}-gcc" >/dev/null; then
     CROSS_CC="${GNU_TRIPLE}-gcc"
     CROSS_CXX="${GNU_TRIPLE}-g++"
@@ -377,7 +377,7 @@ fi
 
 # Strip all host tools
 for b in "$HOST_TOOLS_DIR/bin"/*; do
-    [ -f "$b" ] && "$CROSS_STRIP" -s "$b" 2>/dev/null || true
+    [ -f "$b" ] && "$CROSS_STRIP" -s --strip-all "$b" 2>/dev/null || true
 done
 
 # 5. Splice LLVM and native tools into official NDK
@@ -427,7 +427,7 @@ fi
 
 # Strip copied binaries
 for b in "$PREBUILT_BIN/make" "$PREBUILT_BIN/yasm" "$PREBUILT_BIN/ytasm" "$PREBUILT_BIN/vsyasm" "$NDK_TOOLCHAIN/bin/yasm"; do
-    [ -f "$b" ] && "$CROSS_STRIP" -s "$b" 2>/dev/null || true
+    [ -f "$b" ] && "$CROSS_STRIP" -s --strip-all "$b" 2>/dev/null || true
 done
 
 # Clean up any leftover unreplaced x86_64 ELF binaries in $PREBUILT_BIN

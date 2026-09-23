@@ -120,6 +120,7 @@ Artifacts published to GitHub Releases adhere to standard naming conventions:
 * **NDK Artifact:** `custom-android-ndk-<release>-<target>.tar.xz`
   *(e.g., `custom-android-ndk-r26d-aarch64-linux-android.tar.xz`)*
 * **Target Architecture:** Strictly canonical triples (`aarch64-linux-android`, `armv7a-linux-androideabi`, `x86_64-linux-android`, `i686-linux-android`). No duplicate aliases.
+* **Checksum File:** Each release tarball is accompanied by its individual `<artifact>.sha256` verification file.
 
 ### 1. LLVM / Clang Revisions (Exact AOSP Commits)
 

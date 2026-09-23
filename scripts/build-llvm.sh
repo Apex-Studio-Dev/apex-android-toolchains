@@ -337,9 +337,9 @@ if [ "$PLATFORM" = "bionic" ]; then
     TRIPLE="${TARGET_CANONICAL}${API}"
     
     # 100% static Bionic compilation: no dynamic glibc or ld-linux dependencies!
-    CROSS_CFLAGS="-static -fno-sanitize=undefined"
-    CROSS_CXXFLAGS="$CROSS_CFLAGS"
-    CROSS_LDFLAGS="-static -Wl,-z,max-page-size=16384"
+    CROSS_CFLAGS="-static -fno-sanitize=undefined -fdata-sections -ffunction-sections"
+    CROSS_CXXFLAGS="$CROSS_CFLAGS -fvisibility-inlines-hidden"
+    CROSS_LDFLAGS="-static -Wl,-z,max-page-size=16384 -Wl,--gc-sections -Wl,--icf=all"
     LLVM_STATIC=ON
     SYSTEM_NAME="Linux"
 
@@ -533,6 +533,8 @@ cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
     -Dzstd_LIBRARY="$DEPS_DIR/lib/libzstd.a" \
     -Dzstd_INCLUDE_DIR="$DEPS_DIR/include" \
     -DLLVM_BUILD_TOOLS=ON \
+    -DLLVM_OPTIMIZED_TABLEGEN=ON \
+    -DLLVM_ENABLE_WARNINGS=OFF \
     -DLLVM_INCLUDE_TESTS=OFF \
     -DLLVM_BUILD_TESTS=OFF \
     -DLLVM_INCLUDE_BENCHMARKS=OFF \
@@ -556,10 +558,15 @@ cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
 log "Compiling distribution components for $REVISION_CLEAN ($TARGET_CANONICAL) with $JOBS jobs..."
 cmake --build "$BUILD_DIR" -j "$JOBS" --target install-distribution
 
-# 10. Strip installed binaries
+# 10. Strip installed binaries and libraries
 log "Stripping installed binaries..."
 find "$INSTALL_DIR/bin" -type f ! -lname '*' | while IFS= read -r f; do
-    "$CROSS_STRIP" "$f" 2>/dev/null || true
+    "$CROSS_STRIP" -s --strip-all "$f" 2>/dev/null || true
+done
+
+log "Stripping installed static libraries..."
+find "$INSTALL_DIR/lib" -type f -name '*.a' | while IFS= read -r a; do
+    "$CROSS_STRIP" --strip-debug "$a" 2>/dev/null || true
 done
 
 # Normalize ELF PT_TLS segment alignment across built LLVM

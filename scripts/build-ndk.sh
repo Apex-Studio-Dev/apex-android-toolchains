@@ -124,7 +124,7 @@ def parse_with_yaml():
         data = yaml.safe_load(f)
     entry = next((r for r in data.get('releases', []) if r['release'] == rel), None)
     if entry:
-        return f\"{entry['required_llvm']}|{entry['llvm_artifact']}|{entry['official_archive']}|{entry['official_url']}\"
+        return f\"{entry['required_llvm']}|{entry['official_archive']}|{entry['official_url']}\"
     return None
 
 def parse_fallback():
@@ -140,7 +140,7 @@ def parse_fallback():
                 if ':' in line and not line.startswith('-'):
                     k, v = line.split(':', 1)
                     props[k.strip()] = v.strip('\"\' ')
-            return f\"{props.get('required_llvm')}|{props.get('llvm_artifact')}|{props.get('official_archive')}|{props.get('official_url')}\"
+            return f\"{props.get('required_llvm')}|{props.get('official_archive')}|{props.get('official_url')}\"
     return None
 
 res = None
@@ -153,14 +153,15 @@ if res:
     print(res)
 else:
     sys.exit(1)
-")"
+"
+)
 
 if [ -z "$META" ]; then
     err "NDK release $RELEASE_CLEAN not found in $NDK_META"
     exit 1
 fi
 
-IFS='|' read -r REQUIRED_LLVM LLVM_ARTIFACT_DEFAULT OFFICIAL_ARCHIVE OFFICIAL_URL <<< "$META"
+IFS='|' read -r REQUIRED_LLVM OFFICIAL_ARCHIVE OFFICIAL_URL <<< "$META"
 log "Requirements: LLVM revision $REQUIRED_LLVM (Target: $TARGET_CANONICAL)"
 
 # 2. Obtain LLVM artifact for this host target

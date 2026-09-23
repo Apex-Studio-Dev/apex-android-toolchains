@@ -95,7 +95,7 @@ def parse_with_yaml():
         data = yaml.safe_load(f)
     entry = next((r for r in data.get('releases', []) if r['revision'] == rev), None)
     if entry:
-        return f\"{entry['llvm_version']}|{entry['llvm_project_commit']}|{entry['llvm_android_commit']}|{entry['artifact']}\"
+        return f\"{entry['llvm_version']}|{entry['llvm_project_commit']}|{entry['llvm_android_commit']}\"
     return None
 
 def parse_fallback():
@@ -111,7 +111,7 @@ def parse_fallback():
                 if ':' in line and not line.startswith('-'):
                     k, v = line.split(':', 1)
                     props[k.strip()] = v.strip('\"\' ')
-            return f\"{props.get('llvm_version')}|{props.get('llvm_project_commit')}|{props.get('llvm_android_commit')}|{props.get('artifact')}\"
+            return f\"{props.get('llvm_version')}|{props.get('llvm_project_commit')}|{props.get('llvm_android_commit')}\"
     return None
 
 res = None
@@ -133,7 +133,7 @@ if [ -z "$META" ]; then
     exit 1
 fi
 
-IFS='|' read -r LLVM_VER LLVM_PROJ_COMMIT LLVM_AND_COMMIT ARTIFACT_NAME <<< "$META"
+IFS='|' read -r LLVM_VER LLVM_PROJ_COMMIT LLVM_AND_COMMIT <<< "$META"
 log "Found metadata: LLVM $LLVM_VER (llvm-project: $LLVM_PROJ_COMMIT, llvm_android: $LLVM_AND_COMMIT)"
 
 fetch_artifact() {

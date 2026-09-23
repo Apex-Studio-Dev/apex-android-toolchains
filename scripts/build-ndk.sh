@@ -222,28 +222,74 @@ NDK_ROOT="$(find "$NDK_UNPACK_DIR" -maxdepth 1 -mindepth 1 -type d -name 'androi
 [ -n "$NDK_ROOT" ] || { err "Failed to find unpacked android-ndk directory"; exit 1; }
 
 NDK_TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64"
-PREBUILT_BIN="$NDK_ROOT/prebuilt/linux-x86_64/bin"
+if [ ! -d "$NDK_TOOLCHAIN" ]; then
+    NDK_TOOLCHAIN="$(find "$NDK_ROOT/toolchains/llvm/prebuilt" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+fi
 
-# 4. Build host tools natively for target architecture (make, yasm, toolbox)
+PREBUILT_BIN="$NDK_ROOT/prebuilt/linux-x86_64/bin"
+if [ ! -d "$PREBUILT_BIN" ]; then
+    PREBUILT_BIN="$(find "$NDK_ROOT/prebuilt" -mindepth 1 -maxdepth 1 -type d -exec test -d '{}/bin' ';' -print | head -n 1)/bin"
+fi
+
+# 4. Build host tools natively for target architecture (make, yasm, ytasm, vsyasm)
 log "Building native host tools (GNU make, yasm) for $TARGET_CANONICAL..."
 HOST_TOOLS_DIR="$WORK_DIR/host-tools"
 mkdir -p "$HOST_TOOLS_DIR/bin"
 
-# Helper to download source files if not locally present
-fetch_source() {
-    local dest="$1"
-    local url="$2"
-    if [ -f "$dest" ]; then return 0; fi
-    mkdir -p "$(dirname "$dest")"
-    log "Downloading $(basename "$dest") from $url..."
-    if command -v aria2c >/dev/null; then
-        aria2c --console-log-level=error --max-tries=5 -x 4 -s 4 --allow-overwrite=true -o "$(basename "$dest")" -d "$(dirname "$dest")" "$url" || curl -fsSL -o "$dest" "$url"
-    else
-        curl -fsSL -o "$dest" "$url"
-    fi
-}
+case "$TARGET_ARCH" in
+    arm64)  GNU_TRIPLE="aarch64-linux-gnu" ;;
+    arm)    GNU_TRIPLE="arm-linux-gnueabihf" ;;
+    x86_64) GNU_TRIPLE="x86_64-linux-gnu" ;;
+    x86)    GNU_TRIPLE="i686-linux-gnu" ;;
+    *)      GNU_TRIPLE="$TARGET_CANONICAL" ;;
+esac
 
-# Build make 4.4 if not already built
+# Setup cross toolchain for host tools
+if [ "$PLATFORM" = "bionic" ]; then
+    API="${ANDROID_PLATFORM:-25}"
+    [ "$TARGET_CANONICAL" = "riscv64-linux-android" ] && API=35
+    TC="$NDK_TOOLCHAIN"
+    CROSS_CC="$TC/bin/${TARGET_CANONICAL}${API}-clang"
+    CROSS_CXX="${CROSS_CC}++"
+    if [ -x "$TC/bin/ld.lld" ]; then
+        CROSS_LD="$TC/bin/ld.lld"
+    elif [ -x "$TC/bin/lld" ]; then
+        CROSS_LD="$TC/bin/lld"
+    else
+        CROSS_LD="ld.lld"
+    fi
+    CROSS_AR="$TC/bin/llvm-ar"
+    CROSS_RANLIB="$TC/bin/llvm-ranlib"
+    CROSS_STRIP="$TC/bin/llvm-strip"
+    CROSS_OBJCOPY="$TC/bin/llvm-objcopy"
+    CROSS_CFLAGS="-O2 -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong -static"
+    CROSS_CXXFLAGS="-O2 -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong -static"
+    CROSS_LDFLAGS="-static"
+elif command -v "${GNU_TRIPLE}-gcc" >/dev/null; then
+    CROSS_CC="${GNU_TRIPLE}-gcc"
+    CROSS_CXX="${GNU_TRIPLE}-g++"
+    CROSS_LD="${GNU_TRIPLE}-ld"
+    CROSS_AR="${GNU_TRIPLE}-ar"
+    CROSS_RANLIB="${GNU_TRIPLE}-ranlib"
+    CROSS_STRIP="${GNU_TRIPLE}-strip"
+    CROSS_OBJCOPY="${GNU_TRIPLE}-objcopy"
+    CROSS_CFLAGS="-O2 -fPIC"
+    CROSS_CXXFLAGS="-O2 -fPIC"
+    CROSS_LDFLAGS="-static-libgcc -static-libstdc++"
+else
+    CROSS_CC="clang"
+    CROSS_CXX="clang++"
+    CROSS_LD="ld.lld"
+    CROSS_AR="llvm-ar"
+    CROSS_RANLIB="llvm-ranlib"
+    CROSS_STRIP="llvm-strip"
+    CROSS_OBJCOPY="llvm-objcopy"
+    CROSS_CFLAGS="-O2"
+    CROSS_CXXFLAGS="-O2"
+    CROSS_LDFLAGS=""
+fi
+
+# Build GNU Make 4.4
 if [ ! -f "$HOST_TOOLS_DIR/bin/make" ]; then
     MAKE_TAR="$ROOT_DIR/ndk/sources/make-4.4.tar.gz"
     if [ ! -f "$MAKE_TAR" ]; then
@@ -256,114 +302,92 @@ if [ ! -f "$HOST_TOOLS_DIR/bin/make" ]; then
             rm -rf make-4.4
             tar -xzf "$MAKE_TAR"
             cd make-4.4
-            CONF_ARGS=( --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype" )
-            CC_CMD=""
-            HOST_FLAG=""
-            case "$TARGET_ARCH" in
-                arm64)
-                    if command -v aarch64-linux-gnu-gcc >/dev/null; then
-                        CC_CMD="aarch64-linux-gnu-gcc"
-                        HOST_FLAG="--host=aarch64-linux-gnu"
-                    fi
-                    ;;
-                arm)
-                    if command -v arm-linux-gnueabihf-gcc >/dev/null; then
-                        CC_CMD="arm-linux-gnueabihf-gcc"
-                        HOST_FLAG="--host=arm-linux-gnueabihf"
-                    fi
-                    ;;
-                x86)
-                    if command -v i686-linux-gnu-gcc >/dev/null; then
-                        CC_CMD="i686-linux-gnu-gcc"
-                        HOST_FLAG="--host=i686-linux-gnu"
-                    fi
-                    ;;
-                x86_64)
-                    if [ "$(uname -m)" = "x86_64" ] && command -v gcc >/dev/null; then
-                        CC_CMD="gcc"
-                    elif command -v x86_64-linux-gnu-gcc >/dev/null; then
-                        CC_CMD="x86_64-linux-gnu-gcc"
-                        HOST_FLAG="--host=x86_64-linux-gnu"
-                    fi
-                    ;;
-            esac
-
-            if [ -n "$CC_CMD" ]; then
-                CONF_ARGS+=( CC="$CC_CMD" )
-                [ -n "$HOST_FLAG" ] && CONF_ARGS+=( "$HOST_FLAG" )
-            elif command -v zig >/dev/null; then
-                CONF_ARGS+=( --host="$TARGET_CANONICAL" CC="zig cc -target $ZIG_TARGET" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
-            fi
+            CONF_ARGS=(
+                --prefix="$HOST_TOOLS_DIR"
+                --build=x86_64-linux-gnu
+                --host="$TARGET_CANONICAL"
+                --disable-posix-spawn
+                --disable-nls
+                CC="$CROSS_CC"
+                CXX="$CROSS_CXX"
+                LD="$CROSS_LD"
+                AR="$CROSS_AR"
+                RANLIB="$CROSS_RANLIB"
+                STRIP="$CROSS_STRIP"
+                OBJCOPY="$CROSS_OBJCOPY"
+                CFLAGS="$CROSS_CFLAGS"
+                CXXFLAGS="$CROSS_CXXFLAGS"
+                LDFLAGS="$CROSS_LDFLAGS"
+                ac_cv_lib_elf_elf_begin=no
+                am_cv_func_iconv=no
+                ac_cv_func_pselect=no
+                ac_cv_func_getloadavg=no
+            )
             ./configure "${CONF_ARGS[@]}"
             make -j"$JOBS"
             make install
         )
-    elif [ "$(uname -m)" = "$TARGET_ARCH" ] && command -v make >/dev/null; then
-        cp "$(command -v make)" "$HOST_TOOLS_DIR/bin/make"
     fi
 fi
 
-# Build yasm if available
+# Build YASM 1.3.0
 if [ ! -f "$HOST_TOOLS_DIR/bin/yasm" ]; then
     YASM_TAR="$ROOT_DIR/ndk/sources/yasm-1.3.0.tar.gz"
     if [ ! -f "$YASM_TAR" ]; then
         fetch_source "$YASM_TAR" "https://www.tortall.net/projects/yasm/releases/yasm-1.3.0.tar.gz" || true
     fi
     if [ -f "$YASM_TAR" ]; then
-        log "Compiling native yasm 1.3.0 for $TARGET_CANONICAL..."
+        log "Compiling native YASM 1.3.0 for $TARGET_CANONICAL..."
         (
             cd "$WORK_DIR"
             rm -rf yasm-1.3.0
             tar -xzf "$YASM_TAR"
             cd yasm-1.3.0
-            CONF_ARGS=( --prefix="$HOST_TOOLS_DIR" --disable-nls CFLAGS="-O2 -fPIC -Wno-error=date-time -Wno-date-time -Wno-error" )
-            CC_CMD=""
-            HOST_FLAG=""
-            case "$TARGET_ARCH" in
-                arm64)
-                    if command -v aarch64-linux-gnu-gcc >/dev/null; then
-                        CC_CMD="aarch64-linux-gnu-gcc"
-                        HOST_FLAG="--host=aarch64-linux-gnu"
-                    fi
-                    ;;
-                arm)
-                    if command -v arm-linux-gnueabihf-gcc >/dev/null; then
-                        CC_CMD="arm-linux-gnueabihf-gcc"
-                        HOST_FLAG="--host=arm-linux-gnueabihf"
-                    fi
-                    ;;
-                x86)
-                    if command -v i686-linux-gnu-gcc >/dev/null; then
-                        CC_CMD="i686-linux-gnu-gcc"
-                        HOST_FLAG="--host=i686-linux-gnu"
-                    fi
-                    ;;
-                x86_64)
-                    if [ "$(uname -m)" = "x86_64" ] && command -v gcc >/dev/null; then
-                        CC_CMD="gcc"
-                    elif command -v x86_64-linux-gnu-gcc >/dev/null; then
-                        CC_CMD="x86_64-linux-gnu-gcc"
-                        HOST_FLAG="--host=x86_64-linux-gnu"
-                    fi
-                    ;;
-            esac
-
-            if [ -n "$CC_CMD" ]; then
-                CONF_ARGS+=( CC="$CC_CMD" )
-                [ -n "$HOST_FLAG" ] && CONF_ARGS+=( "$HOST_FLAG" )
-            elif command -v zig >/dev/null; then
-                CONF_ARGS+=( --host="$TARGET_CANONICAL" CC="zig cc -target $ZIG_TARGET" AR="zig ar" RANLIB="zig ranlib" LDFLAGS="-static" )
-            fi
+            CONF_ARGS=(
+                --prefix="$HOST_TOOLS_DIR"
+                --build=x86_64-linux-gnu
+                --host="$TARGET_CANONICAL"
+                --disable-nls
+                CC="$CROSS_CC"
+                CXX="$CROSS_CXX"
+                LD="$CROSS_LD"
+                AR="$CROSS_AR"
+                RANLIB="$CROSS_RANLIB"
+                STRIP="$CROSS_STRIP"
+                OBJCOPY="$CROSS_OBJCOPY"
+                CC_FOR_BUILD="/usr/bin/cc"
+                CCLD_FOR_BUILD="/usr/bin/cc"
+                CFLAGS_FOR_BUILD="-O2"
+                LDFLAGS_FOR_BUILD=""
+                CFLAGS="$CROSS_CFLAGS -Wno-error=date-time"
+                CXXFLAGS="$CROSS_CXXFLAGS -Wno-error=date-time"
+                LDFLAGS="$CROSS_LDFLAGS"
+            )
             ./configure "${CONF_ARGS[@]}"
+            # Ensure host tools are compiled with host cc if needed
+            for gen in genperf genmacro genversion genstring; do
+                make CC=/usr/bin/cc CCLD=/usr/bin/cc "$gen" 2>/dev/null || true
+            done
             make -j"$JOBS"
             make install
+            # Ensure ytasm and vsyasm are also present in $HOST_TOOLS_DIR/bin
+            for extra in ytasm vsyasm; do
+                if [ -f "$WORK_DIR/yasm-1.3.0/$extra" ]; then
+                    cp -f "$WORK_DIR/yasm-1.3.0/$extra" "$HOST_TOOLS_DIR/bin/$extra"
+                elif [ -f "$HOST_TOOLS_DIR/bin/yasm" ]; then
+                    cp -f "$HOST_TOOLS_DIR/bin/yasm" "$HOST_TOOLS_DIR/bin/$extra"
+                fi
+            done
         )
-    elif [ "$(uname -m)" = "$TARGET_ARCH" ] && command -v yasm >/dev/null; then
-        cp "$(command -v yasm)" "$HOST_TOOLS_DIR/bin/yasm"
     fi
 fi
 
-# 5. Splice LLVM into official NDK
+# Strip all host tools
+for b in "$HOST_TOOLS_DIR/bin"/*; do
+    [ -f "$b" ] && "$CROSS_STRIP" -s "$b" 2>/dev/null || true
+done
+
+# 5. Splice LLVM and native tools into official NDK
 log "Splicing native $TARGET_CANONICAL LLVM into NDK..."
 
 # Strip debugger wrappers not applicable to host
@@ -371,13 +395,16 @@ rm -f "$NDK_ROOT"/ndk-lldb "$NDK_ROOT"/ndk-lldb.cmd "$NDK_ROOT"/ndk-gdb "$NDK_RO
 rm -f "$PREBUILT_BIN"/ndk-gdb "$PREBUILT_BIN"/ndk-gdb.cmd "$PREBUILT_BIN"/ndkgdb.pyz 2>/dev/null || true
 rm -f "$NDK_TOOLCHAIN/bin"/*lldb* 2>/dev/null || true
 
-# Replace ELF tools with our host LLVM ones
+# Replace ELF tools with our host LLVM ones, and drop unreplaced x86_64 binaries
 find "$NDK_TOOLCHAIN/bin" -type f | while IFS= read -r file; do
     bname="$(basename "$file")"
     if [ -f "$HOST_LLVM_DIR/bin/$bname" ] && file "$file" | grep -q 'ELF'; then
         cp -f "$HOST_LLVM_DIR/bin/$bname" "$file"
     elif file "$file" | grep -q 'Bourne-Again shell script'; then
         sed -i 's,#!/usr/bin/env bash,#!/usr/bin/env sh,' "$file"
+    elif ! file "$file" | grep -Eq 'Python script|Perl script|ASCII text'; then
+        # Any remaining unreplaced ELF binary is host x86_64; remove it to prevent execution failures on target
+        rm -f "$file"
     fi
 done
 
@@ -388,12 +415,8 @@ for bin in clang clang++ ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-r
     fi
 done
 
-# Update shebangs for portability across bionic and linux
-for sh_file in "$NDK_ROOT/build/tools/ndk_bin_common.sh" "$NDK_ROOT/build/ndk-build"; do
-    [ -f "$sh_file" ] && sed -i 's,#!/usr/bin/env bash,#!/usr/bin/env sh,' "$sh_file"
-done
-
-# Copy host make and yasm
+# Copy native GNU Make, Yasm, Ytasm, and Vsyasm into prebuilt
+rm -f "$PREBUILT_BIN"/*asm
 if [ -f "$HOST_TOOLS_DIR/bin/make" ]; then
     mkdir -p "$PREBUILT_BIN"
     cp -f "$HOST_TOOLS_DIR/bin/make" "$PREBUILT_BIN/make"
@@ -402,11 +425,60 @@ if [ -f "$HOST_TOOLS_DIR/bin/yasm" ]; then
     cp -f "$HOST_TOOLS_DIR/bin/yasm" "$PREBUILT_BIN/yasm"
     cp -f "$HOST_TOOLS_DIR/bin/yasm" "$NDK_TOOLCHAIN/bin/yasm"
 fi
+if [ -f "$HOST_TOOLS_DIR/bin/ytasm" ]; then
+    cp -f "$HOST_TOOLS_DIR/bin/ytasm" "$PREBUILT_BIN/ytasm"
+fi
+if [ -f "$HOST_TOOLS_DIR/bin/vsyasm" ]; then
+    cp -f "$HOST_TOOLS_DIR/bin/vsyasm" "$PREBUILT_BIN/vsyasm"
+fi
+
+# Strip copied binaries
+for b in "$PREBUILT_BIN/make" "$PREBUILT_BIN/yasm" "$PREBUILT_BIN/ytasm" "$PREBUILT_BIN/vsyasm" "$NDK_TOOLCHAIN/bin/yasm"; do
+    [ -f "$b" ] && "$CROSS_STRIP" -s "$b" 2>/dev/null || true
+done
+
+# Clean up any leftover unreplaced x86_64 ELF binaries in $PREBUILT_BIN
+if [ "$TARGET_ARCH" != "x86_64" ]; then
+    find "$PREBUILT_BIN" -type f | while IFS= read -r file; do
+        if file "$file" | grep -q 'ELF.*x86-64'; then
+            rm -f "$file"
+        fi
+    done
+fi
+
+# Copy helper scripts
+if [ -f "$ROOT_DIR/ndk/patches/ndk/scripts/clang-tidy.sh" ]; then
+    cp -f "$ROOT_DIR/ndk/patches/ndk/scripts/clang-tidy.sh" "$NDK_TOOLCHAIN/bin/clang-tidy.sh"
+    chmod +x "$NDK_TOOLCHAIN/bin/clang-tidy.sh"
+fi
+if [ -f "$ROOT_DIR/ndk/patches/ndk/scripts/ndk-which" ]; then
+    cp -f "$ROOT_DIR/ndk/patches/ndk/scripts/ndk-which" "$PREBUILT_BIN/ndk-which"
+    chmod +x "$PREBUILT_BIN/ndk-which"
+fi
+
+# Remove unused x86_64 host resources
+rm -rf "$NDK_TOOLCHAIN/python3"
+rm -rf "$NDK_TOOLCHAIN/musl"
+rm -rf "$NDK_ROOT/simpleperf"
+find "$NDK_TOOLCHAIN/lib" -maxdepth 1 -mindepth 1 -not -name clang -exec rm -rf {} + 2>/dev/null || true
+find "$NDK_TOOLCHAIN" -maxdepth 5 -path "*/lib/clang/[0-9][0-9]/lib/*" -not -name linux -exec rm -rf {} + 2>/dev/null || true
 
 # Copy clang headers / runtime libraries
 if [ -d "$HOST_LLVM_DIR/lib/clang" ]; then
     cp -Rf "$HOST_LLVM_DIR/lib/clang" "$NDK_TOOLCHAIN/lib/"
 fi
+
+# Update shebangs for portability across bionic and linux
+for sh_file in "$NDK_ROOT/build/tools/ndk_bin_common.sh" "$NDK_ROOT/build/tools/make_standalone_toolchain.py" "$NDK_ROOT/build/ndk-build"; do
+    [ -f "$sh_file" ] && sed -i 's,#!/usr/bin/env bash,#!/usr/bin/env sh,' "$sh_file"
+done
+for sh_bin in "$NDK_ROOT/ndk-gdb" "$NDK_ROOT/ndk-lldb" "$NDK_ROOT/ndk-stack" "$NDK_ROOT/ndk-which" "$PREBUILT_BIN/ndk-gdb" "$PREBUILT_BIN/ndk-stack" "$PREBUILT_BIN/ndk-which"; do
+    if [ -f "$sh_bin" ]; then
+        sed -i 's,#!/bin/bash,#!/bin/sh,' "$sh_bin"
+        sed -i 's,#!/usr/bin/env bash,#!/usr/bin/env sh,' "$sh_bin"
+        sed -i "s|linux-x86_64|$HOST_TAG|g" "$sh_bin"
+    fi
+done
 
 # 6. Adjust host directory layout and CMake toolchains
 log "Patching host tag and CMake toolchains for $TARGET_CANONICAL..."
@@ -416,17 +488,48 @@ if [ -f "$NDK_ROOT/build/tools/ndk_bin_common.sh" ]; then
     sed -i -E '/case \$HOST_ARCH in/,/esac/ c\
 case $HOST_ARCH in\
   armv5te|armv6|armv6l|armv7|armv7l|armv8l) HOST_ARCH=arm;;\
+  armv8b) HOST_ARCH=arm_be;;\
   aarch64|arm64) HOST_ARCH=arm64;;\
+  aarch64_be) HOST_ARCH=arm64_be;;\
   i?86) HOST_ARCH=x86;;\
   amd64|x86_64) HOST_ARCH=x86_64;;\
+  riscv64) HOST_ARCH=riscv64;;\
   *) HOST_ARCH=$HOST_ARCH;;\
 esac' "$NDK_ROOT/build/tools/ndk_bin_common.sh"
 fi
 
-# Patch cmake toolchain files
+# Patch cmake toolchain files to dynamically resolve uname -m on Android/Termux
 for tc in "$NDK_ROOT/build/cmake/android.toolchain.cmake" "$NDK_ROOT/build/cmake/android-legacy.toolchain.cmake"; do
     if [ -f "$tc" ]; then
-        sed -i -E "s/linux-x86_64/$HOST_TAG/g" "$tc" 2>/dev/null || true
+        sed -i -E '/^if\(CMAKE_HOST_SYSTEM_NAME STREQUAL Linux\)$/,/^endif\(\)$/c\
+if(CMAKE_HOST_SYSTEM_NAME STREQUAL Linux OR CMAKE_HOST_SYSTEM_NAME STREQUAL Android)\
+    execute_process(\
+        COMMAND uname -m\
+        OUTPUT_VARIABLE HOST_ARCH\
+        OUTPUT_STRIP_TRAILING_WHITESPACE\
+    )\
+\
+    if(HOST_ARCH STREQUAL "aarch64")\
+        set(ARCH "arm64")\
+    elseif(HOST_ARCH MATCHES "^armv[0-9]+l$")\
+        set(ARCH "arm")\
+    elseif(HOST_ARCH STREQUAL "arm64" OR HOST_ARCH STREQUAL "arm64e")\
+        set(ARCH "arm64")\
+    elseif(HOST_ARCH STREQUAL "amd64")\
+        set(ARCH "x86_64")\
+    elseif(HOST_ARCH MATCHES "^i[3-6]86$")\
+        set(ARCH "x86")\
+    else()\
+        set(ARCH "${HOST_ARCH}")\
+    endif()\
+\
+    set(ANDROID_HOST_TAG "linux-${ARCH}")\
+\
+elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL Darwin)\
+    set(ANDROID_HOST_TAG "darwin-x86_64")\
+elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL Windows)\
+    set(ANDROID_HOST_TAG "windows-x86_64")\
+endif()' "$tc"
     fi
 done
 
@@ -445,7 +548,7 @@ log "NDK assembly complete at $NDK_ROOT"
 # 7. Verification
 if [ "$VERIFY_AFTER_BUILD" = true ]; then
     log "Verifying assembled NDK cross-compilation capability..."
-    "$SCRIPT_DIR/verify-ndk.sh" --ndk="$NDK_ROOT" --release="$RELEASE_CLEAN"
+    "$SCRIPT_DIR/verify-ndk.sh" --ndk="$NDK_ROOT" --release="$RELEASE_CLEAN" --target="$TARGET_CANONICAL"
 fi
 
 # 8. Package

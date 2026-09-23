@@ -51,11 +51,11 @@ done
 
 # Determine expected host tag by target triple
 case "$TARGET" in
-    aarch64*|arm64*|linux-arm64) HOST_TAG="linux-arm64" ;;
-    arm*|linux-arm)              HOST_TAG="linux-arm" ;;
-    x86_64*|amd64*|linux-x86_64) HOST_TAG="linux-x86_64" ;;
-    i*86*|x86*|linux-x86)        HOST_TAG="linux-x86" ;;
-    *)                           HOST_TAG="linux-arm64" ;;
+    aarch64*|arm64*|linux-arm64) HOST_TAG="linux-arm64"; TARGET_ARCH="arm64" ;;
+    arm*|linux-arm)              HOST_TAG="linux-arm"; TARGET_ARCH="arm" ;;
+    x86_64*|amd64*|linux-x86_64) HOST_TAG="linux-x86_64"; TARGET_ARCH="x86_64" ;;
+    i*86*|x86*|linux-x86)        HOST_TAG="linux-x86"; TARGET_ARCH="x86" ;;
+    *)                           HOST_TAG="linux-arm64"; TARGET_ARCH="arm64" ;;
 esac
 
 # Locate LLVM toolchain directory
@@ -104,53 +104,172 @@ EXEC_WRAPPER=()
 case "$TARGET" in
     arm*|linux-arm)
         if [ "$HOST_ARCH" != "arm" ] && [ "$HOST_ARCH" != "armv7l" ]; then
+            local_prefix=""
             for p in "/usr/arm-linux-gnueabihf" "/usr/arm-linux-gnueabi"; do
-                if [ -d "$p" ]; then
-                    export QEMU_LD_PREFIX="$p"
-                    export LD_LIBRARY_PATH="$p/lib:$p/usr/lib:${LD_LIBRARY_PATH:-}"
-                    if command -v qemu-arm-static >/dev/null; then
-                        EXEC_WRAPPER=( "qemu-arm-static" "-L" "$p" )
-                    elif command -v qemu-arm >/dev/null; then
-                        EXEC_WRAPPER=( "qemu-arm" "-L" "$p" )
-                    fi
-                    break
-                fi
+                [ -d "$p" ] && { local_prefix="$p"; break; }
             done
+            if command -v qemu-arm-static >/dev/null; then
+                [ -n "$local_prefix" ] && EXEC_WRAPPER=( "qemu-arm-static" "-L" "$local_prefix" ) || EXEC_WRAPPER=( "qemu-arm-static" )
+            elif command -v qemu-arm >/dev/null; then
+                [ -n "$local_prefix" ] && EXEC_WRAPPER=( "qemu-arm" "-L" "$local_prefix" ) || EXEC_WRAPPER=( "qemu-arm" )
+            fi
+            if [ -n "$local_prefix" ]; then
+                export QEMU_LD_PREFIX="$local_prefix"
+                export LD_LIBRARY_PATH="$local_prefix/lib:$local_prefix/usr/lib:${LD_LIBRARY_PATH:-}"
+            fi
         fi
         ;;
     aarch64*|arm64*|linux-arm64)
         if [ "$HOST_ARCH" != "aarch64" ]; then
-            if [ -d "/usr/aarch64-linux-gnu" ]; then
-                export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
-                export LD_LIBRARY_PATH="/usr/aarch64-linux-gnu/lib:/usr/aarch64-linux-gnu/usr/lib:${LD_LIBRARY_PATH:-}"
-                if command -v qemu-aarch64-static >/dev/null; then
-                    EXEC_WRAPPER=( "qemu-aarch64-static" "-L" "/usr/aarch64-linux-gnu" )
-                elif command -v qemu-aarch64 >/dev/null; then
-                    EXEC_WRAPPER=( "qemu-aarch64" "-L" "/usr/aarch64-linux-gnu" )
-                fi
+            local_prefix=""
+            [ -d "/usr/aarch64-linux-gnu" ] && local_prefix="/usr/aarch64-linux-gnu"
+            if command -v qemu-aarch64-static >/dev/null; then
+                [ -n "$local_prefix" ] && EXEC_WRAPPER=( "qemu-aarch64-static" "-L" "$local_prefix" ) || EXEC_WRAPPER=( "qemu-aarch64-static" )
+            elif command -v qemu-aarch64 >/dev/null; then
+                [ -n "$local_prefix" ] && EXEC_WRAPPER=( "qemu-aarch64" "-L" "$local_prefix" ) || EXEC_WRAPPER=( "qemu-aarch64" )
+            fi
+            if [ -n "$local_prefix" ]; then
+                export QEMU_LD_PREFIX="$local_prefix"
+                export LD_LIBRARY_PATH="$local_prefix/lib:$local_prefix/usr/lib:${LD_LIBRARY_PATH:-}"
             fi
         fi
         ;;
     i*86*|linux-x86|x86)
         if [ "$HOST_ARCH" != "i686" ]; then
+            local_prefix=""
             for p in "/usr/i686-linux-gnu" "/usr/i386-linux-gnu"; do
-                if [ -d "$p" ]; then
-                    export QEMU_LD_PREFIX="$p"
-                    export LD_LIBRARY_PATH="$p/lib:$p/usr/lib:${LD_LIBRARY_PATH:-}"
-                    if command -v qemu-i386-static >/dev/null; then
-                        EXEC_WRAPPER=( "qemu-i386-static" "-L" "$p" )
-                    elif command -v qemu-i386 >/dev/null; then
-                        EXEC_WRAPPER=( "qemu-i386" "-L" "$p" )
-                    fi
-                    break
-                fi
+                [ -d "$p" ] && { local_prefix="$p"; break; }
             done
+            if command -v qemu-i386-static >/dev/null; then
+                [ -n "$local_prefix" ] && EXEC_WRAPPER=( "qemu-i386-static" "-L" "$local_prefix" ) || EXEC_WRAPPER=( "qemu-i386-static" )
+            elif command -v qemu-i386 >/dev/null; then
+                [ -n "$local_prefix" ] && EXEC_WRAPPER=( "qemu-i386" "-L" "$local_prefix" ) || EXEC_WRAPPER=( "qemu-i386" )
+            fi
+            if [ -n "$local_prefix" ]; then
+                export QEMU_LD_PREFIX="$local_prefix"
+                export LD_LIBRARY_PATH="$local_prefix/lib:$local_prefix/usr/lib:${LD_LIBRARY_PATH:-}"
+            fi
         fi
         ;;
 esac
 
-log "Checking ELF host architecture of NDK clang..."
-file -L "$CLANG_BIN" | sed 's/^/  /'
+log "Checking ELF host architecture and linkage of NDK clang..."
+CLANG_FILE="$(file -L "$CLANG_BIN")"
+echo "  $CLANG_FILE"
+
+# Architecture verification
+case "$TARGET_ARCH" in
+    arm64)
+        if ! echo "$CLANG_FILE" | grep -Eq 'ARM aarch64|aarch64'; then
+            err "FAIL: $CLANG_BIN is not an ARM aarch64 binary!"; exit 1
+        fi
+        ;;
+    arm)
+        if ! echo "$CLANG_FILE" | grep -Eq 'ARM'; then
+            err "FAIL: $CLANG_BIN is not an ARM binary!"; exit 1
+        fi
+        ;;
+    x86)
+        if ! echo "$CLANG_FILE" | grep -Eq '80386'; then
+            err "FAIL: $CLANG_BIN is not an i386/i686 binary!"; exit 1
+        fi
+        ;;
+    x86_64)
+        if ! echo "$CLANG_FILE" | grep -Eq 'x86-64'; then
+            err "FAIL: $CLANG_BIN is not an x86_64 binary!"; exit 1
+        fi
+        ;;
+esac
+
+# Linkage verification: Android target host must NOT have glibc ld-linux interpreter
+if echo "$TARGET" | grep -q "android"; then
+    if echo "$CLANG_FILE" | grep -Eq '/lib/ld-linux|/lib64/ld-linux'; then
+        err "FAIL: $CLANG_BIN has glibc dynamic linker! It must be static Bionic or native Android."
+        exit 1
+    fi
+    log "PASS: clang linkage verified (not dependent on glibc ld-linux)."
+fi
+
+# Locate prebuilt host tools directory
+PREBUILT_DIR=""
+for tag in "$HOST_TAG" "linux-arm64" "linux-aarch64" "linux-arm" "linux-x86_64" "linux-x86"; do
+    if [ -d "$NDK_DIR/prebuilt/$tag/bin" ]; then
+        PREBUILT_DIR="$NDK_DIR/prebuilt/$tag/bin"
+        break
+    fi
+done
+
+if [ -n "$PREBUILT_DIR" ]; then
+    log "Verifying host prebuilt tools in $PREBUILT_DIR..."
+    
+    # Check make and yasm exist
+    [ -f "$PREBUILT_DIR/make" ] || { err "FAIL: make missing in $PREBUILT_DIR"; exit 1; }
+    [ -f "$PREBUILT_DIR/yasm" ] || { err "FAIL: yasm missing in $PREBUILT_DIR"; exit 1; }
+
+    for tool in "$PREBUILT_DIR"/*; do
+        [ -f "$tool" ] || continue
+        tool_file="$(file "$tool")"
+        tool_name="$(basename "$tool")"
+
+        if echo "$tool_file" | grep -q "ELF"; then
+            # Verify no unreplaced x86_64 binaries
+            if [ "$TARGET_ARCH" != "x86_64" ] && echo "$tool_file" | grep -q "x86-64"; then
+                err "FAIL: $tool_name in $PREBUILT_DIR is an unreplaced x86_64 binary!"
+                exit 1
+            fi
+
+            # Check target architecture
+            case "$TARGET_ARCH" in
+                arm64)
+                    if ! echo "$tool_file" | grep -Eq 'ARM aarch64|aarch64'; then
+                        err "FAIL: $tool_name in $PREBUILT_DIR is not ARM aarch64: $tool_file"; exit 1
+                    fi
+                    ;;
+                arm)
+                    if ! echo "$tool_file" | grep -Eq 'ARM'; then
+                        err "FAIL: $tool_name in $PREBUILT_DIR is not ARM: $tool_file"; exit 1
+                    fi
+                    ;;
+            esac
+
+            # Linkage verification
+            if echo "$TARGET" | grep -q "android"; then
+                if echo "$tool_file" | grep -Eq '/lib/ld-linux|/lib64/ld-linux'; then
+                    err "FAIL: $tool_name in $PREBUILT_DIR has glibc dynamic linker ($tool_file)!"
+                    exit 1
+                fi
+            fi
+            log "  Tool $tool_name verified: $(echo "$tool_file" | cut -d: -f2-)"
+        fi
+    done
+
+    # Test executing make
+    if [ -x "$PREBUILT_DIR/make" ]; then
+        if "${EXEC_WRAPPER[@]}" "$PREBUILT_DIR/make" --version >/dev/null 2>&1; then
+            MAKE_VER="$("${EXEC_WRAPPER[@]}" "$PREBUILT_DIR/make" --version | head -n 1)"
+            log "PASS: Native make execution verified: $MAKE_VER"
+        else
+            log "NOTICE: Host emulation could not execute make; ELF architecture and linkage confirmed."
+        fi
+    fi
+fi
+
+# Verify no leftover x86_64 binaries in toolchain bin
+if [ "$TARGET_ARCH" != "x86_64" ]; then
+    log "Checking for leftover x86_64 binaries in $TC_DIR/bin..."
+    LEFTOVER_COUNT=0
+    for b in "$TC_DIR/bin"/*; do
+        if [ -f "$b" ] && file "$b" | grep -q "ELF.*x86-64"; then
+            err "Leftover x86_64 binary found: $(basename "$b")"
+            LEFTOVER_COUNT=$((LEFTOVER_COUNT + 1))
+        fi
+    done
+    if [ "$LEFTOVER_COUNT" -gt 0 ]; then
+        err "FAIL: Found $LEFTOVER_COUNT leftover x86_64 binaries in toolchain bin!"
+        exit 1
+    fi
+    log "PASS: No leftover x86_64 binaries in toolchain bin."
+fi
 
 log "=========================================================="
 log "TEST 1: Cross-compiling for Android ARM64 (aarch64-linux-android30)"

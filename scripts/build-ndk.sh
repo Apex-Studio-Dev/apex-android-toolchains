@@ -560,7 +560,7 @@ fi
 
 # Update shebangs for universal portability across bionic and linux
 log "Normalizing all shell script shebangs to /bin/sh across NDK..."
-find "$NDK_ROOT" -type f | while IFS= read -r file; do
+find "$NDK_ROOT" -path "*/sysroot/*" -prune -o -path "*/sources/*" -prune -o -type f -print | while IFS= read -r file; do
     if head -n 1 "$file" 2>/dev/null | grep -Eq '^#!.*(bash|sh)'; then
         sed -i '1s|^#!.*|#!/bin/sh|' "$file"
         sed -i "s|linux-x86_64|$HOST_TAG|g" "$file" 2>/dev/null || true

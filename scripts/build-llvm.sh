@@ -225,14 +225,16 @@ if entry:
     ndks = entry.get('ndk_releases', [])
     m = re.search(r'r(\d+)', ndks[0] if ndks else rev)
     ndk_major = m.group(1) if m else '26'
-    print(f\"{entry['llvm_version']}|{entry['llvm_project_commit']}|{entry['llvm_android_commit']}|{ndk_major}\")
+    targets = entry.get('targets') or data.get('llvm_targets') or ['AArch64', 'ARM', 'X86', 'RISCV', 'WebAssembly']
+    targets_str = ';'.join(targets)
+    print(f\"{entry['llvm_version']}|{entry['llvm_project_commit']}|{entry['llvm_android_commit']}|{ndk_major}|{targets_str}\")
 else:
-    print('17.0.2|d9f89f4d16663d5012e5c09495f3b30ece3d2362|8443a75fcd5c80245b194f6510b98a11098fe7fe|26')
+    print('17.0.2|d9f89f4d16663d5012e5c09495f3b30ece3d2362|8443a75fcd5c80245b194f6510b98a11098fe7fe|26|AArch64;ARM;X86;RISCV;WebAssembly')
 ")"
 
-IFS='|' read -r LLVM_VER LLVM_PROJ_COMMIT LLVM_AND_COMMIT NDK_MAJOR <<< "$META"
+IFS='|' read -r LLVM_VER LLVM_PROJ_COMMIT LLVM_AND_COMMIT NDK_MAJOR TARGETS_STR <<< "$META"
 LLVM_MAJOR="${LLVM_VER%%.*}"
-log "Metadata: LLVM $LLVM_VER (Project: $LLVM_PROJ_COMMIT, llvm_android: $LLVM_AND_COMMIT, NDK base: r$NDK_MAJOR)"
+log "Metadata: LLVM $LLVM_VER (Project: $LLVM_PROJ_COMMIT, llvm_android: $LLVM_AND_COMMIT, NDK base: r$NDK_MAJOR, Backends: $TARGETS_STR)"
 
 # 1. Fetch exact source code
 SRC_DIR="$WORK_DIR/source"
@@ -567,7 +569,7 @@ cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
     -DCMAKE_EXE_LINKER_FLAGS="$CROSS_LDFLAGS" \
     -DCMAKE_SHARED_LINKER_FLAGS="$CROSS_LDFLAGS" \
     -DCMAKE_MODULE_LINKER_FLAGS="$CROSS_LDFLAGS" \
-    -DLLVM_TARGETS_TO_BUILD="${LLVM_TARGETS:-AArch64;ARM;X86;RISCV;WebAssembly}" \
+    -DLLVM_TARGETS_TO_BUILD="${LLVM_TARGETS:-${TARGETS_STR:-AArch64;ARM;X86;RISCV;WebAssembly}}" \
     -DLLVM_ENABLE_PROJECTS="$LLVM_PROJECTS" \
     -DLLVM_DISTRIBUTION_COMPONENTS="$LLVM_DIST_COMPONENTS" \
     -DLLVM_ENABLE_LTO="${LLVM_LTO:-Thin}" \

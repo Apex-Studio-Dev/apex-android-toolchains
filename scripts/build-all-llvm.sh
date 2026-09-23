@@ -53,13 +53,31 @@ if [ -z "$PLATFORM" ]; then
     esac
 fi
 
-# Default target if empty
-if [ -z "$TARGET" ]; then
-    if [ "$PLATFORM" = "linux" ]; then
-        TARGET="aarch64-linux-gnu"
-    else
-        TARGET="aarch64-linux-android"
+# Resolve target list from metadata if TARGET is "all"
+if [ "$TARGET" = "all" ]; then
+    TARGETS=($(python3 -c "
+import yaml
+with open('$METADATA_FILE') as f:
+    data = yaml.safe_load(f)
+targets = data.get('supported_host_platforms', {}).get('$PLATFORM', {}).get('targets', [])
+if not targets:
+    if '$PLATFORM' == 'linux':
+        targets = ['aarch64-linux-gnu', 'armv7a-linux-gnueabihf', 'x86_64-linux-gnu', 'i686-linux-gnu']
+    else:
+        targets = ['aarch64-linux-android', 'armv7a-linux-androideabi', 'x86_64-linux-android', 'i686-linux-android']
+for t in targets:
+    print(t)
+"))
+else
+    # Default target if empty
+    if [ -z "$TARGET" ]; then
+        if [ "$PLATFORM" = "linux" ]; then
+            TARGET="aarch64-linux-gnu"
+        else
+            TARGET="aarch64-linux-android"
+        fi
     fi
+    TARGETS=("$TARGET")
 fi
 
 # Read all revisions from metadata
@@ -71,21 +89,24 @@ for r in data.get('releases', []):
     print(r['revision'])
 "))
 
-log "Found ${#REVISIONS[@]} LLVM revisions to process: ${REVISIONS[*]} (Target: $TARGET)"
+log "Found ${#REVISIONS[@]} LLVM revisions to process: ${REVISIONS[*]}"
+log "Target architectures (${#TARGETS[@]}): ${TARGETS[*]} (Platform: $PLATFORM)"
 
 for rev in "${REVISIONS[@]}"; do
-    log "------------------------------------------------------------"
-    log "Processing LLVM Revision: $rev ($TARGET)"
-    log "------------------------------------------------------------"
-    
-    # Check if artifact exists
-    ARTIFACT="custom-llvm-${rev#clang-}-${TARGET}.tar.xz"
-    if [ "$REBUILD" = false ] && [ -f "$ROOT_DIR/build/artifacts/$ARTIFACT" ]; then
-        log "Artifact $ARTIFACT already exists. Skipping compilation."
-        continue
-    fi
+    for tgt in "${TARGETS[@]}"; do
+        log "------------------------------------------------------------"
+        log "Processing LLVM Revision: $rev ($tgt, Platform: $PLATFORM)"
+        log "------------------------------------------------------------"
+        
+        # Check if artifact exists
+        ARTIFACT="custom-llvm-${rev#clang-}-${tgt}.tar.xz"
+        if [ "$REBUILD" = false ] && [ -f "$ROOT_DIR/build/artifacts/$ARTIFACT" ]; then
+            log "Artifact $ARTIFACT already exists. Skipping compilation."
+            continue
+        fi
 
-    "$SCRIPT_DIR/build-llvm.sh" --revision="$rev" --target="$TARGET" --platform="$PLATFORM"
+        "$SCRIPT_DIR/build-llvm.sh" --revision="$rev" --target="$tgt" --platform="$PLATFORM"
+    done
 done
 
 log "All LLVM revisions processed successfully!"

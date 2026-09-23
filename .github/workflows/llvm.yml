@@ -86,8 +86,15 @@ jobs:
               data = yaml.safe_load(f)
           all_revs = [x['revision'] for x in data['releases']]
 
+          host_platforms = data.get('supported_host_platforms', {})
+          all_targets = host_platforms.get(platform, {}).get('targets', [])
+          if not all_targets:
+              if platform == 'linux':
+                  all_targets = ['aarch64-linux-gnu', 'armv7a-linux-gnueabihf', 'x86_64-linux-gnu', 'i686-linux-gnu']
+              else:
+                  all_targets = ['aarch64-linux-android', 'armv7a-linux-androideabi', 'x86_64-linux-android', 'i686-linux-android']
+
           if platform == 'linux':
-              all_targets = ['aarch64-linux-gnu', 'armv7a-linux-gnueabihf', 'x86_64-linux-gnu', 'i686-linux-gnu']
               target_map = {
                   'aarch64': 'aarch64-linux-gnu',
                   'armv7a': 'armv7a-linux-gnueabihf',
@@ -95,7 +102,6 @@ jobs:
                   'i686': 'i686-linux-gnu',
               }
           else:
-              all_targets = ['aarch64-linux-android', 'armv7a-linux-androideabi', 'x86_64-linux-android', 'i686-linux-android']
               target_map = {
                   'aarch64': 'aarch64-linux-android',
                   'armv7a': 'armv7a-linux-androideabi',

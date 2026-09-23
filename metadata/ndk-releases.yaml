@@ -7,6 +7,20 @@ official_ndk_base_url: "https://dl.google.com/android/repository"
 artifact_pattern: "custom-android-ndk-{release}-{target}.tar.xz"
 llvm_artifact_pattern: "custom-llvm-{revision}-{target}.tar.xz"
 
+supported_host_platforms:
+  bionic:
+    targets:
+      - "aarch64-linux-android"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
+  linux:
+    targets:
+      - "aarch64-linux-gnu"
+      - "armv7a-linux-gnueabihf"
+      - "x86_64-linux-gnu"
+      - "i686-linux-gnu"
+
 releases:
   - release: "r26"
     tag: "ndk-r26"
@@ -16,7 +30,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r26-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r26b"
     tag: "ndk-r26b"
@@ -26,7 +42,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r26b-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r26c"
     tag: "ndk-r26c"
@@ -36,7 +54,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r26c-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r26d"
     tag: "ndk-r26d"
@@ -46,7 +66,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r26d-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r27"
     tag: "ndk-r27"
@@ -56,7 +78,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r27-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r27b"
     tag: "ndk-r27b"
@@ -66,7 +90,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r27b-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r27c"
     tag: "ndk-r27c"
@@ -76,7 +102,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r27c-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r27d"
     tag: "ndk-r27d"
@@ -86,7 +114,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r27d-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r28"
     tag: "ndk-r28"
@@ -96,7 +126,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r28-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r28b"
     tag: "ndk-r28b"
@@ -106,7 +138,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r28b-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r28c"
     tag: "ndk-r28c"
@@ -116,7 +150,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r28c-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r29"
     tag: "ndk-r29"
@@ -126,7 +162,9 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r29-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"
 
   - release: "r30"
     tag: "ndk-r30"
@@ -136,4 +174,6 @@ releases:
     official_url: "https://dl.google.com/android/repository/android-ndk-r30-linux.zip"
     targets:
       - "aarch64-linux-android"
-      - "arm-linux-androideabi"
+      - "armv7a-linux-androideabi"
+      - "x86_64-linux-android"
+      - "i686-linux-android"

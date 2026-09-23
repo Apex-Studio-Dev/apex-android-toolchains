@@ -54,13 +54,31 @@ if [ -z "$PLATFORM" ]; then
     esac
 fi
 
-# Default target if empty
-if [ -z "$TARGET" ]; then
-    if [ "$PLATFORM" = "linux" ]; then
-        TARGET="aarch64-linux-gnu"
-    else
-        TARGET="aarch64-linux-android"
+# Resolve target list from metadata if TARGET is "all"
+if [ "$TARGET" = "all" ]; then
+    TARGETS=($(python3 -c "
+import yaml
+with open('$METADATA_FILE') as f:
+    data = yaml.safe_load(f)
+targets = data.get('supported_host_platforms', {}).get('$PLATFORM', {}).get('targets', [])
+if not targets:
+    if '$PLATFORM' == 'linux':
+        targets = ['aarch64-linux-gnu', 'armv7a-linux-gnueabihf', 'x86_64-linux-gnu', 'i686-linux-gnu']
+    else:
+        targets = ['aarch64-linux-android', 'armv7a-linux-androideabi', 'x86_64-linux-android', 'i686-linux-android']
+for t in targets:
+    print(t)
+"))
+else
+    # Default target if empty
+    if [ -z "$TARGET" ]; then
+        if [ "$PLATFORM" = "linux" ]; then
+            TARGET="aarch64-linux-gnu"
+        else
+            TARGET="aarch64-linux-android"
+        fi
     fi
+    TARGETS=("$TARGET")
 fi
 
 # Read all releases from metadata
@@ -72,23 +90,26 @@ for r in data.get('releases', []):
     print(r['release'])
 "))
 
-log "Found ${#RELEASES[@]} NDK releases to assemble: ${RELEASES[*]} (Target: $TARGET)"
+log "Found ${#RELEASES[@]} NDK releases to assemble: ${RELEASES[*]}"
+log "Target architectures (${#TARGETS[@]}): ${TARGETS[*]} (Platform: $PLATFORM)"
 
 for rel in "${RELEASES[@]}"; do
-    log "============================================================"
-    log "Assembling Custom Android NDK: $rel ($TARGET)"
-    log "============================================================"
-    
-    ARTIFACT="custom-android-ndk-${rel}-${TARGET}.tar.xz"
-    if [ -f "$ROOT_DIR/build/artifacts/$ARTIFACT" ]; then
-        log "Artifact $ARTIFACT already exists. Skipping assembly."
-        continue
-    fi
+    for tgt in "${TARGETS[@]}"; do
+        log "============================================================"
+        log "Assembling Custom Android NDK: $rel ($tgt, Platform: $PLATFORM)"
+        log "============================================================"
+        
+        ARTIFACT="custom-android-ndk-${rel}-${tgt}.tar.xz"
+        if [ -f "$ROOT_DIR/build/artifacts/$ARTIFACT" ]; then
+            log "Artifact $ARTIFACT already exists. Skipping assembly."
+            continue
+        fi
 
-    NDK_ARGS=( "--release=$rel" "--target=$TARGET" "--platform=$PLATFORM" )
-    [ "$REBUILD_LLVM" = true ] && NDK_ARGS+=( "--rebuild-llvm" )
+        NDK_ARGS=( "--release=$rel" "--target=$tgt" "--platform=$PLATFORM" )
+        [ "$REBUILD_LLVM" = true ] && NDK_ARGS+=( "--rebuild-llvm" )
 
-    "$SCRIPT_DIR/build-ndk.sh" "${NDK_ARGS[@]}"
+        "$SCRIPT_DIR/build-ndk.sh" "${NDK_ARGS[@]}"
+    done
 done
 
 log "All Custom Android NDK releases assembled successfully!"

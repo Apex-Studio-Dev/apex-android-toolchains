@@ -284,11 +284,42 @@ HOST_TOOLS_DIR="$WORK_DIR/host-tools"
 mkdir -p "$HOST_TOOLS_DIR/bin"
 
 case "$TARGET_ARCH" in
-    arm64)  GNU_TRIPLE="aarch64-linux-gnu" ;;
-    arm)    GNU_TRIPLE="arm-linux-gnueabihf" ;;
-    x86_64) GNU_TRIPLE="x86_64-linux-gnu" ;;
-    x86)    GNU_TRIPLE="i686-linux-gnu" ;;
-    *)      GNU_TRIPLE="$TARGET_CANONICAL" ;;
+    arm)
+        if [ "$PLATFORM" = "bionic" ]; then
+            AUTOCONF_HOST="arm-linux-androideabi"
+        else
+            AUTOCONF_HOST="arm-linux-gnueabihf"
+        fi
+        GNU_TRIPLE="arm-linux-gnueabihf"
+        ;;
+    arm64)
+        if [ "$PLATFORM" = "bionic" ]; then
+            AUTOCONF_HOST="aarch64-linux-android"
+        else
+            AUTOCONF_HOST="aarch64-linux-gnu"
+        fi
+        GNU_TRIPLE="aarch64-linux-gnu"
+        ;;
+    x86_64)
+        if [ "$PLATFORM" = "bionic" ]; then
+            AUTOCONF_HOST="x86_64-linux-android"
+        else
+            AUTOCONF_HOST="x86_64-linux-gnu"
+        fi
+        GNU_TRIPLE="x86_64-linux-gnu"
+        ;;
+    x86)
+        if [ "$PLATFORM" = "bionic" ]; then
+            AUTOCONF_HOST="i686-linux-android"
+        else
+            AUTOCONF_HOST="i686-linux-gnu"
+        fi
+        GNU_TRIPLE="i686-linux-gnu"
+        ;;
+    *)
+        AUTOCONF_HOST="$TARGET_CANONICAL"
+        GNU_TRIPLE="$TARGET_CANONICAL"
+        ;;
 esac
 
 # Setup cross toolchain for host tools
@@ -343,16 +374,22 @@ if [ ! -f "$HOST_TOOLS_DIR/bin/make" ]; then
         fetch_source "$MAKE_TAR" "https://ftp.gnu.org/gnu/make/make-4.4.tar.gz" || true
     fi
     if [ -f "$MAKE_TAR" ]; then
-        log "Compiling native GNU Make 4.4 for $TARGET_CANONICAL..."
+        log "Compiling native GNU Make 4.4 for $TARGET_CANONICAL ($AUTOCONF_HOST)..."
         (
             cd "$WORK_DIR"
             rm -rf make-4.4
             tar -xzf "$MAKE_TAR"
             cd make-4.4
+            if [ -d build-aux ]; then
+                cp -f "$ROOT_DIR/ndk/config/config.sub" build-aux/
+                cp -f "$ROOT_DIR/ndk/config/config.guess" build-aux/
+            fi
+            [ -f config.sub ] && cp -f "$ROOT_DIR/ndk/config/config.sub" .
+            [ -f config.guess ] && cp -f "$ROOT_DIR/ndk/config/config.guess" .
             CONF_ARGS=(
                 --prefix="$HOST_TOOLS_DIR"
                 --build=x86_64-linux-gnu
-                --host="$TARGET_CANONICAL"
+                --host="$AUTOCONF_HOST"
                 --disable-posix-spawn
                 --disable-nls
                 CC="$CROSS_CC"
@@ -384,16 +421,22 @@ if [ ! -f "$HOST_TOOLS_DIR/bin/yasm" ]; then
         fetch_source "$YASM_TAR" "https://www.tortall.net/projects/yasm/releases/yasm-1.3.0.tar.gz" || true
     fi
     if [ -f "$YASM_TAR" ]; then
-        log "Compiling native YASM 1.3.0 for $TARGET_CANONICAL..."
+        log "Compiling native YASM 1.3.0 for $TARGET_CANONICAL ($AUTOCONF_HOST)..."
         (
             cd "$WORK_DIR"
             rm -rf yasm-1.3.0
             tar -xzf "$YASM_TAR"
             cd yasm-1.3.0
+            if [ -d config ]; then
+                cp -f "$ROOT_DIR/ndk/config/config.sub" config/
+                cp -f "$ROOT_DIR/ndk/config/config.guess" config/
+            fi
+            [ -f config.sub ] && cp -f "$ROOT_DIR/ndk/config/config.sub" .
+            [ -f config.guess ] && cp -f "$ROOT_DIR/ndk/config/config.guess" .
             CONF_ARGS=(
                 --prefix="$HOST_TOOLS_DIR"
                 --build=x86_64-linux-gnu
-                --host="$TARGET_CANONICAL"
+                --host="$AUTOCONF_HOST"
                 --disable-nls
                 CC="$CROSS_CC"
                 CXX="$CROSS_CXX"

@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - verify-llvm.sh
+# Apex Toolchains - verify-llvm.sh
 # Validate that the LLVM toolchain is native Linux ARM64 (AArch64) and operational
 # ==============================================================================
 set -euo pipefail
@@ -24,12 +24,15 @@ Usage: $0 --dir=<llvm_install_dir> [options]
 Options:
   --dir=<path>         Path to LLVM installation prefix (contains bin/lib)
   --revision=<name>    Revision name (for reporting)
+  --target=<triple>    Host target triple
+  --platform=<plat>    Host execution platform: bionic | linux
   -h, --help           Show this help message
 EOF
     exit 1
 }
 
-TARGET="${TARGET:-aarch64-linux-android}"
+TARGET="${TARGET:-}"
+PLATFORM="${PLATFORM:-}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -39,6 +42,8 @@ while [ $# -gt 0 ]; do
         --revision) shift; REVISION="$1" ;;
         --target=*) TARGET="${1#*=}" ;;
         --target) shift; TARGET="$1" ;;
+        --platform=*) PLATFORM="${1#*=}" ;;
+        --platform) shift; PLATFORM="$1" ;;
         -h|--help) usage ;;
         *) err "Unknown option: $1"; usage ;;
     esac
@@ -46,6 +51,22 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$LLVM_DIR" ] || { err "LLVM directory is required (--dir=<path>)"; usage; }
+
+# Infer platform if not explicitly set
+if [ -z "$PLATFORM" ]; then
+    case "$TARGET" in
+        *-linux-gnu*|linux-gnu*) PLATFORM="linux" ;;
+        *) PLATFORM="bionic" ;;
+    esac
+fi
+
+if [ -z "$TARGET" ]; then
+    if [ "$PLATFORM" = "linux" ]; then
+        TARGET="aarch64-linux-gnu"
+    else
+        TARGET="aarch64-linux-android"
+    fi
+fi
 
 BIN_DIR="$LLVM_DIR/bin"
 [ -d "$BIN_DIR" ] || { err "Directory $BIN_DIR does not exist"; exit 1; }
@@ -101,11 +122,13 @@ fi
 log "PASS: Binary matches expected architecture pattern ($FILE_PATTERN)"
 
 # Validate ELF linkage (prevent glibc dynamic linker from masquerading as Android toolchain)
-if echo "$FILE_OUT" | grep -Eq "interpreter /lib/ld-linux"; then
-    err "FAIL: $CLANG is dynamically linked against GNU/glibc interpreter (/lib/ld-linux)!"
-    err "On Android/Termux, this causes immediate 'no such file or directory' errors because /lib/ld-linux does not exist."
-    err "Android/Bionic LLVM binaries must be statically linked."
-    exit 1
+if [ "$PLATFORM" = "bionic" ]; then
+    if echo "$FILE_OUT" | grep -Eq "interpreter /lib(64)?/ld-linux"; then
+        err "FAIL: $CLANG is dynamically linked against GNU/glibc interpreter (/lib/ld-linux)!"
+        err "On Android/Termux, this causes immediate 'no such file or directory' errors because /lib/ld-linux does not exist."
+        err "Android/Bionic LLVM binaries must be statically linked."
+        exit 1
+    fi
 fi
 
 IS_STATIC=false

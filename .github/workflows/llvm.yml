@@ -25,14 +25,22 @@ on:
       target:
         description: "Host execution target architecture (or 'all' for all 4 archs)"
         required: true
-        default: "aarch64-linux-android"
+        default: "all"
         type: choice
         options:
           - "all"
+          - "aarch64"
+          - "armv7a"
+          - "x86_64"
+          - "i686"
           - "aarch64-linux-android"
           - "armv7a-linux-androideabi"
           - "x86_64-linux-android"
           - "i686-linux-android"
+          - "aarch64-linux-gnu"
+          - "armv7a-linux-gnueabihf"
+          - "x86_64-linux-gnu"
+          - "i686-linux-gnu"
       platform:
         description: "Host execution platform"
         required: true
@@ -72,11 +80,28 @@ jobs:
           ref_name = os.environ.get('GITHUB_REF_NAME', '')
           input_rev = '${{ inputs.revision }}'
           input_target = '${{ inputs.target }}'
+          platform = '$PLATFORM'
 
           with open('metadata/llvm-releases.yaml') as f:
               data = yaml.safe_load(f)
           all_revs = [x['revision'] for x in data['releases']]
-          all_targets = ['aarch64-linux-android', 'armv7a-linux-androideabi', 'x86_64-linux-android', 'i686-linux-android']
+
+          if platform == 'linux':
+              all_targets = ['aarch64-linux-gnu', 'armv7a-linux-gnueabihf', 'x86_64-linux-gnu', 'i686-linux-gnu']
+              target_map = {
+                  'aarch64': 'aarch64-linux-gnu',
+                  'armv7a': 'armv7a-linux-gnueabihf',
+                  'x86_64': 'x86_64-linux-gnu',
+                  'i686': 'i686-linux-gnu',
+              }
+          else:
+              all_targets = ['aarch64-linux-android', 'armv7a-linux-androideabi', 'x86_64-linux-android', 'i686-linux-android']
+              target_map = {
+                  'aarch64': 'aarch64-linux-android',
+                  'armv7a': 'armv7a-linux-androideabi',
+                  'x86_64': 'x86_64-linux-android',
+                  'i686': 'i686-linux-android',
+              }
 
           if event == 'push' and ref_name.startswith('llvm-'):
               revs = ['clang-' + ref_name[5:]]
@@ -88,6 +113,8 @@ jobs:
 
           if input_target == 'all' or not input_target:
               targets = all_targets
+          elif input_target in target_map:
+              targets = [target_map[input_target]]
           else:
               targets = [input_target]
 
@@ -142,7 +169,7 @@ jobs:
             llvm-ccache-
 
       - name: Set up QEMU
-        if: matrix.target != 'x86_64-linux-android'
+        if: matrix.target != 'x86_64-linux-android' && matrix.target != 'x86_64-linux-gnu'
         uses: docker/setup-qemu-action@v3
 
       - name: Log in to GHCR
@@ -204,19 +231,22 @@ jobs:
             scripts/verify-llvm.sh \
               --dir="build/${{ steps.meta.outputs.revision }}-${{ steps.meta.outputs.target }}/install" \
               --revision="${{ steps.meta.outputs.revision }}" \
-              --target="${{ steps.meta.outputs.target }}"
+              --target="${{ steps.meta.outputs.target }}" \
+              --platform="${{ steps.meta.outputs.platform }}"
 
       - name: Generate Release Notes
         run: |
           REV="${{ steps.meta.outputs.revision }}"
           TAG="${{ steps.meta.outputs.tag }}"
           TARGET="${{ steps.meta.outputs.target }}"
+          PLATFORM="${{ steps.meta.outputs.platform }}"
           mkdir -p build
           cat <<EOF > build/RELEASE_NOTES.md
-          ## Custom Android LLVM/Clang — ${REV} (${TARGET})
+          ## Custom LLVM/Clang — ${REV} (${TARGET})
 
           - **Git Tag:** \`${TAG}\`
-          - **Host Environment:** \`${TARGET}\` (Native execution on this Android/Linux architecture)
+          - **Host Platform:** \`${PLATFORM}\`
+          - **Host Target:** \`${TARGET}\` (Native execution on this Android/Linux architecture)
           - **Multi-Arch Code Generation:** Capable of cross-compiling to \`arm64-v8a\`, \`armeabi-v7a\`, \`x86_64\`, \`x86\`, and \`riscv64\`.
           EOF
 

@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - build-all-llvm.sh
+# Apex Toolchains - build-all-llvm.sh
 # Batch orchestrator to build all 12 exact LLVM releases
 # ==============================================================================
 set -euo pipefail
@@ -12,8 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 METADATA_FILE="$ROOT_DIR/metadata/llvm-releases.yaml"
 
-TARGET="${TARGET:-aarch64-linux-android}"
-PLATFORM="${PLATFORM:-bionic}"
+TARGET="${TARGET:-}"
+PLATFORM="${PLATFORM:-}"
 REBUILD=false
 
 log() { printf '\033[1;35m[build-all-llvm]==>\033[0m %s\n' "$*"; }
@@ -23,7 +23,7 @@ usage() {
 Usage: $0 [options]
 
 Options:
-  --target=<triple>    Host target triple (default: aarch64-linux-android)
+  --target=<triple>    Host target triple (default: aarch64-linux-android for bionic, aarch64-linux-gnu for linux)
   --platform=<plat>    Target platform: bionic (default) | linux
   --rebuild            Force rebuilding even if artifact exists
   -h, --help           Show this help message
@@ -43,6 +43,24 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+# Infer platform from target if not explicitly passed
+if [ -z "$PLATFORM" ]; then
+    case "$TARGET" in
+        *-linux-gnu*|linux-gnu*) PLATFORM="linux" ;;
+        *-linux-android*|linux-android*) PLATFORM="bionic" ;;
+        *) PLATFORM="bionic" ;;
+    esac
+fi
+
+# Default target if empty
+if [ -z "$TARGET" ]; then
+    if [ "$PLATFORM" = "linux" ]; then
+        TARGET="aarch64-linux-gnu"
+    else
+        TARGET="aarch64-linux-android"
+    fi
+fi
 
 # Read all revisions from metadata
 REVISIONS=($(python3 -c "

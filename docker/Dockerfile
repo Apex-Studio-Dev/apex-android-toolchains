@@ -1,4 +1,4 @@
-# Prebuilt build container for apex-android-toolchains
+# Prebuilt build container for apex-toolchains
 # Encapsulates LLVM/Clang build toolchains, CMake, Ninja, Zig cross-compilers,
 # QEMU emulation for Linux ARM64 execution verification, and packaging utilities.
 FROM ubuntu:24.04
@@ -8,8 +8,8 @@ ARG LLVM_MINGW_VERSION=20260826
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-LABEL org.opencontainers.image.source="https://github.com/Apex-Studio-Dev/apex-android-toolchains"
-LABEL org.opencontainers.image.description="Builder image for Apex Android LLVM and NDK toolchains"
+LABEL org.opencontainers.image.source="https://github.com/Apex-Studio-Dev/apex-toolchains"
+LABEL org.opencontainers.image.description="Builder image for Apex LLVM and NDK toolchains"
 
 # Core build system & dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends software-properties-common \

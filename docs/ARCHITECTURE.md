@@ -2,7 +2,7 @@
 
 ## Overview
 
-`apex-android-toolchains` is designed as an independent, reproducible toolchain monorepo providing **native execution support across all 4 Android host architectures**:
+`apex-toolchains` is designed as an independent, reproducible toolchain monorepo providing **native execution support across Android (Bionic) and Linux (GNU) host architectures**:
 1. **`aarch64-linux-android`** (`arm64-v8a`): Modern 64-bit ARM smartphones, tablets, Termux.
 2. **`armv7a-linux-androideabi`** (`armeabi-v7a`): Legacy 32-bit ARM devices and embedded systems.
 3. **`x86_64-linux-android`**: 64-bit Android PC emulators, Windows Subsystem for Android (WSA), and Waydroid Linux.

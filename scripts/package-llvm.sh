@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - package-llvm.sh
+# Apex Toolchains - package-llvm.sh
 # Package built LLVM into custom-llvm-<revision>-<target>.tar.xz
 # ==============================================================================
 set -euo pipefail

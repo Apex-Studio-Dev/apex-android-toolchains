@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - fetch-llvm.sh
+# Apex Toolchains - fetch-llvm.sh
 # Fetch LLVM prebuilt artifact or source code using exact AOSP commits
 # ==============================================================================
 set -euo pipefail
@@ -14,8 +14,8 @@ METADATA_FILE="$ROOT_DIR/metadata/llvm-releases.yaml"
 
 REVISION=""
 MODE="auto"           # auto | artifact | source
-PLATFORM="${PLATFORM:-bionic}"   # bionic | linux
-TARGET="${TARGET:-aarch64-linux-android}"
+PLATFORM="${PLATFORM:-}"   # bionic | linux
+TARGET="${TARGET:-}"
 DEST_DIR=""
 REPO_OWNER="${REPO_OWNER:-Apex-Studio-Dev}"
 
@@ -29,7 +29,7 @@ Usage: $0 --revision=<rev> [options]
 
 Options:
   --revision=<name>    LLVM revision (e.g. clang-r487747e or llvm-r487747e)
-  --target=<triple>    Host target triple (default: aarch64-linux-android)
+  --target=<triple>    Host target triple (default: aarch64-linux-android for bionic, aarch64-linux-gnu for linux)
   --platform=<plat>    Host platform: bionic (default) | linux
   --artifact-only      Only attempt to fetch release artifact
   --source-only        Only fetch exact source from AOSP
@@ -62,14 +62,42 @@ done
 
 [ -n "$REVISION" ] || { err "Revision is required (--revision=<name>)"; usage; }
 
-# Canonicalize target architecture
-case "$TARGET" in
-    aarch64*|arm64*|linux-arm64) TARGET_CANONICAL="aarch64-linux-android" ;;
-    arm*|linux-arm)              TARGET_CANONICAL="armv7a-linux-androideabi" ;;
-    x86_64*|amd64*|linux-x86_64) TARGET_CANONICAL="x86_64-linux-android" ;;
-    i*86*|x86*|linux-x86)        TARGET_CANONICAL="i686-linux-android" ;;
-    *)                           TARGET_CANONICAL="$TARGET" ;;
-esac
+# Infer platform from target if not explicitly passed
+if [ -z "$PLATFORM" ]; then
+    case "$TARGET" in
+        *-linux-gnu*|linux-gnu*) PLATFORM="linux" ;;
+        *-linux-android*|linux-android*) PLATFORM="bionic" ;;
+        *) PLATFORM="bionic" ;;
+    esac
+fi
+
+# Default target if empty
+if [ -z "$TARGET" ]; then
+    if [ "$PLATFORM" = "linux" ]; then
+        TARGET="aarch64-linux-gnu"
+    else
+        TARGET="aarch64-linux-android"
+    fi
+fi
+
+# Canonicalize target architecture based on platform
+if [ "$PLATFORM" = "linux" ]; then
+    case "$TARGET" in
+        aarch64-linux-gnu|aarch64*|arm64*|linux-arm64) TARGET_CANONICAL="aarch64-linux-gnu" ;;
+        arm-linux-gnueabihf|armv7a-linux-gnueabihf|arm*|linux-arm) TARGET_CANONICAL="armv7a-linux-gnueabihf" ;;
+        x86_64-linux-gnu|x86_64*|amd64*|linux-x86_64) TARGET_CANONICAL="x86_64-linux-gnu" ;;
+        i686-linux-gnu|i*86*|x86*|linux-x86) TARGET_CANONICAL="i686-linux-gnu" ;;
+        *)                           TARGET_CANONICAL="$TARGET" ;;
+    esac
+else
+    case "$TARGET" in
+        aarch64-linux-android|aarch64*|arm64*|linux-arm64) TARGET_CANONICAL="aarch64-linux-android" ;;
+        arm-linux-androideabi|armv7a-linux-androideabi|arm*|linux-arm) TARGET_CANONICAL="armv7a-linux-androideabi" ;;
+        x86_64-linux-android|x86_64*|amd64*|linux-x86_64) TARGET_CANONICAL="x86_64-linux-android" ;;
+        i686-linux-android|i*86*|x86*|linux-x86) TARGET_CANONICAL="i686-linux-android" ;;
+        *)                           TARGET_CANONICAL="$TARGET" ;;
+    esac
+fi
 
 # Normalize revision name (remove llvm- prefix if present)
 REVISION_CLEAN="${REVISION#llvm-}"
@@ -153,8 +181,8 @@ fetch_artifact() {
     mkdir -p "$(dirname "$out_path")"
 
     local urls=(
-        "https://github.com/${REPO_OWNER}/apex-android-toolchains/releases/download/${target_tag}/${art}"
-        "https://gitlab.com/${REPO_OWNER}/apex-android-toolchains/-/releases/${target_tag}/downloads/${art}"
+        "https://github.com/${REPO_OWNER}/apex-toolchains/releases/download/${target_tag}/${art}"
+        "https://gitlab.com/${REPO_OWNER}/apex-toolchains/-/releases/${target_tag}/downloads/${art}"
     )
 
     for u in "${urls[@]}"; do

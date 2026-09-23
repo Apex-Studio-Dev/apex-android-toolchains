@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - package-ndk.sh
+# Apex Toolchains - package-ndk.sh
 # Package assembled Custom NDK into custom-android-ndk-<release>-<target>.tar.xz
 # ==============================================================================
 set -euo pipefail

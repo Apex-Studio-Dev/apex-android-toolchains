@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - verify-ndk.sh
+# Apex Toolchains - verify-ndk.sh
 # Validate Custom NDK: Cross-compile hello.c for Android ARM64 & ARM32, verify ELF
 # ==============================================================================
 set -euo pipefail
@@ -25,12 +25,14 @@ Options:
   --ndk=<path>         Path to assembled Android NDK root
   --release=<name>     Release version (e.g. r26d)
   --target=<triple>    Host target triple (default: aarch64-linux-android)
+  --platform=<plat>    Host execution platform: bionic | linux
   -h, --help           Show this help message
 EOF
     exit 1
 }
 
 TARGET="${TARGET:-aarch64-linux-android}"
+PLATFORM="${PLATFORM:-}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -40,6 +42,8 @@ while [ $# -gt 0 ]; do
         --release) shift; RELEASE="$1" ;;
         --target=*) TARGET="${1#*=}" ;;
         --target) shift; TARGET="$1" ;;
+        --platform=*) PLATFORM="${1#*=}" ;;
+        --platform) shift; PLATFORM="$1" ;;
         -h|--help) usage ;;
         *) err "Unknown option: $1"; usage ;;
     esac
@@ -48,6 +52,14 @@ done
 
 [ -n "$NDK_DIR" ] || { err "NDK directory is required (--ndk=<path>)"; usage; }
 [ -d "$NDK_DIR" ] || { err "NDK directory $NDK_DIR does not exist"; exit 1; }
+
+# Infer platform if not explicitly set
+if [ -z "$PLATFORM" ]; then
+    case "$TARGET" in
+        *-linux-gnu*|linux-gnu*) PLATFORM="linux" ;;
+        *) PLATFORM="bionic" ;;
+    esac
+fi
 
 # Determine expected host tag by target triple
 case "$TARGET" in
@@ -182,7 +194,7 @@ case "$TARGET_ARCH" in
 esac
 
 # Linkage verification: Android target host must NOT have glibc ld-linux interpreter
-if echo "$TARGET" | grep -q "android"; then
+if [ "$PLATFORM" = "bionic" ] || echo "$TARGET" | grep -q "android"; then
     if echo "$CLANG_FILE" | grep -Eq '/lib/ld-linux|/lib64/ld-linux'; then
         err "FAIL: $CLANG_BIN has glibc dynamic linker! It must be static Bionic or native Android."
         exit 1

@@ -1,11 +1,11 @@
-# Apex Android Toolchains
+# Apex Toolchains
 
-[![CI - LLVM Multi-Arch](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/llvm.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/llvm.yml)
-[![CI - NDK Multi-Arch](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/ndk.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/ndk.yml)
-[![Docker Builder Image](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/docker-image.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-android-toolchains/actions/workflows/docker-image.yml)
+[![CI - LLVM Multi-Arch](https://github.com/Apex-Studio-Dev/apex-toolchains/actions/workflows/llvm.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-toolchains/actions/workflows/llvm.yml)
+[![CI - NDK Multi-Arch](https://github.com/Apex-Studio-Dev/apex-toolchains/actions/workflows/ndk.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-toolchains/actions/workflows/ndk.yml)
+[![Docker Builder Image](https://github.com/Apex-Studio-Dev/apex-toolchains/actions/workflows/docker-image.yml/badge.svg)](https://github.com/Apex-Studio-Dev/apex-toolchains/actions/workflows/docker-image.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An enterprise-grade, automated monorepo designed to build **Custom Android LLVM/Clang** and standalone **Custom Android NDK** toolchains with **native execution support across all 4 Android host architectures**, capable of full multi-target cross-compilation.
+An enterprise-grade, automated monorepo designed to build **Custom LLVM/Clang** and standalone **Custom Android NDK** toolchains with **native execution support across Android (Bionic) and Linux (GNU) host architectures**, capable of full multi-target cross-compilation.
 
 ---
 
@@ -39,7 +39,7 @@ An enterprise-grade, automated monorepo designed to build **Custom Android LLVM/
 
 Official Google Android NDK and LLVM releases only provide prebuilt host compilers for `linux-x86_64`, `darwin-x86_64/arm64`, and `windows-x86_64`. Developers wishing to compile native C/C++ applications directly on Android devices (e.g. inside **Termux**, mobile IDEs, or on-device CI test runners) or on 32-bit Android devices have historically been left without official native toolchains.
 
-**`apex-android-toolchains`** solves this by providing:
+**`apex-toolchains`** solves this by providing:
 1. **Native Execution on Android:** Binaries run directly on Android OS (via Bionic libc) without requiring glibc chroots or PRoot translation layers.
 2. **Support for All 4 Android Host Architectures:** Available for `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`.
 3. **True Cross-Compilation:** Any single compiler binary—regardless of the host machine it runs on—can target all 5 Android ABIs (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`, and `riscv64`).
@@ -167,7 +167,7 @@ Download the tarball matching your device architecture (most modern phones use `
 
 ```bash
 # 1. Download custom NDK release
-wget https://github.com/Apex-Studio-Dev/apex-android-toolchains/releases/download/ndk-r26d/custom-android-ndk-r26d-aarch64-linux-android.tar.xz
+wget https://github.com/Apex-Studio-Dev/apex-toolchains/releases/download/ndk-r26d/custom-android-ndk-r26d-aarch64-linux-android.tar.xz
 
 # 2. Extract to your preferred location
 mkdir -p ~/android-ndk-r26d
@@ -288,7 +288,7 @@ Before packaging and uploading, every toolchain artifact is validated through au
 ## 📁 Repository Structure
 
 ```
-apex-android-toolchains/
+apex-toolchains/
 ├── docker/
 │   ├── Dockerfile                # Multi-platform builder image definition
 │   └── .dockerignore

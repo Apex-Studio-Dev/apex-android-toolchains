@@ -1,4 +1,4 @@
-# Apex Android Toolchains - NDK Releases Metadata
+# Apex Toolchains - NDK Releases Metadata
 # Exact NDK releases, mapped LLVM revisions, official AOSP bases, and target requirements
 version: 1
 

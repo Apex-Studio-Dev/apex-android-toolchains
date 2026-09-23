@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - build-llvm.sh
+# Apex Toolchains - build-llvm.sh
 # Build fully static native Android (Bionic) & Linux LLVM/Clang with exact AOSP revisions
 # Supports native execution on Android (Termux, PRoot, Android apps) and Linux
 # ==============================================================================
@@ -14,8 +14,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 METADATA_FILE="$ROOT_DIR/metadata/llvm-releases.yaml"
 
 REVISION=""
-TARGET="${TARGET:-aarch64-linux-android}"  # aarch64-linux-android | armv7a-linux-androideabi | x86_64-linux-android | i686-linux-android
-PLATFORM="${PLATFORM:-bionic}"            # bionic | linux
+TARGET="${TARGET:-}"
+PLATFORM="${PLATFORM:-}"            # bionic | linux
 BUILD_DIR=""
 INSTALL_DIR=""
 JOBS="$(nproc 2>/dev/null || echo 4)"
@@ -77,8 +77,8 @@ Usage: $0 --revision=<name> [options]
 
 Options:
   --revision=<name>    LLVM revision to build (e.g. clang-r487747e)
-  --target=<triple>    Host execution target (default: aarch64-linux-android)
-                       [aarch64-linux-android | armv7a-linux-androideabi | x86_64-linux-android | i686-linux-android]
+  --target=<triple>    Host execution target (default: aarch64-linux-android for bionic, aarch64-linux-gnu for linux)
+                       [aarch64 | armv7a | x86_64 | i686] or full triple
   --platform=<plat>    Target execution environment: bionic (default) | linux
   --jobs=<N>           Build parallelism (default: $JOBS)
   --build-dir=<dir>    Scratch directory for compilation
@@ -117,34 +117,83 @@ done
 
 [ -n "$REVISION" ] || { err "Revision is required (--revision=<name>)"; usage; }
 
-# Canonicalize target architecture
-case "$TARGET" in
-    aarch64-linux-android|aarch64|arm64|linux-arm64)
-        TARGET_CANONICAL="aarch64-linux-android"
-        TARGET_ARCH="AArch64"
-        TARGET_PROC="aarch64"
-        ;;
-    arm-linux-androideabi|armv7a-linux-androideabi|arm|armv7a|linux-arm)
-        TARGET_CANONICAL="armv7a-linux-androideabi"
-        TARGET_ARCH="ARM"
-        TARGET_PROC="arm"
-        ;;
-    x86_64-linux-android|x86_64|amd64|linux-x86_64)
-        TARGET_CANONICAL="x86_64-linux-android"
-        TARGET_ARCH="X86"
-        TARGET_PROC="x86_64"
-        ;;
-    i686-linux-android|i686|x86|linux-x86)
-        TARGET_CANONICAL="i686-linux-android"
-        TARGET_ARCH="X86"
-        TARGET_PROC="i686"
-        ;;
-    *)
-        TARGET_CANONICAL="$TARGET"
-        TARGET_ARCH="AArch64"
-        TARGET_PROC="aarch64"
-        ;;
-esac
+# Infer platform from target if not explicitly passed
+if [ -z "$PLATFORM" ]; then
+    case "$TARGET" in
+        *-linux-gnu*|linux-gnu*) PLATFORM="linux" ;;
+        *-linux-android*|linux-android*) PLATFORM="bionic" ;;
+        *) PLATFORM="bionic" ;;
+    esac
+fi
+
+# Default target if empty
+if [ -z "$TARGET" ]; then
+    if [ "$PLATFORM" = "linux" ]; then
+        TARGET="aarch64-linux-gnu"
+    else
+        TARGET="aarch64-linux-android"
+    fi
+fi
+
+# Canonicalize target architecture based on platform
+if [ "$PLATFORM" = "linux" ]; then
+    case "$TARGET" in
+        aarch64-linux-gnu|aarch64|arm64|linux-arm64)
+            TARGET_CANONICAL="aarch64-linux-gnu"
+            TARGET_ARCH="AArch64"
+            TARGET_PROC="aarch64"
+            ;;
+        arm-linux-gnueabihf|armv7a-linux-gnueabihf|arm|armv7a|linux-arm)
+            TARGET_CANONICAL="armv7a-linux-gnueabihf"
+            TARGET_ARCH="ARM"
+            TARGET_PROC="arm"
+            ;;
+        x86_64-linux-gnu|x86_64|amd64|linux-x86_64)
+            TARGET_CANONICAL="x86_64-linux-gnu"
+            TARGET_ARCH="X86"
+            TARGET_PROC="x86_64"
+            ;;
+        i686-linux-gnu|i686|x86|linux-x86)
+            TARGET_CANONICAL="i686-linux-gnu"
+            TARGET_ARCH="X86"
+            TARGET_PROC="i686"
+            ;;
+        *)
+            TARGET_CANONICAL="$TARGET"
+            TARGET_ARCH="AArch64"
+            TARGET_PROC="aarch64"
+            ;;
+    esac
+else
+    # bionic platform
+    case "$TARGET" in
+        aarch64-linux-android|aarch64|arm64|linux-arm64)
+            TARGET_CANONICAL="aarch64-linux-android"
+            TARGET_ARCH="AArch64"
+            TARGET_PROC="aarch64"
+            ;;
+        arm-linux-androideabi|armv7a-linux-androideabi|arm|armv7a|linux-arm)
+            TARGET_CANONICAL="armv7a-linux-androideabi"
+            TARGET_ARCH="ARM"
+            TARGET_PROC="arm"
+            ;;
+        x86_64-linux-android|x86_64|amd64|linux-x86_64)
+            TARGET_CANONICAL="x86_64-linux-android"
+            TARGET_ARCH="X86"
+            TARGET_PROC="x86_64"
+            ;;
+        i686-linux-android|i686|x86|linux-x86)
+            TARGET_CANONICAL="i686-linux-android"
+            TARGET_ARCH="X86"
+            TARGET_PROC="i686"
+            ;;
+        *)
+            TARGET_CANONICAL="$TARGET"
+            TARGET_ARCH="AArch64"
+            TARGET_PROC="aarch64"
+            ;;
+    esac
+fi
 
 # Normalize revision
 REVISION_CLEAN="${REVISION#llvm-}"
@@ -373,14 +422,18 @@ if [ "$PLATFORM" = "bionic" ]; then
     rm -f "$BUILD_DIR/so-probe.c" "$BUILD_DIR/so-probe"
 else
     # Linux (musl or glibc)
-    if command -v "${TARGET_PROC}-linux-gnu-gcc" >/dev/null; then
-        CROSS_CC="${TARGET_PROC}-linux-gnu-gcc"
-        CROSS_CXX="${TARGET_PROC}-linux-gnu-g++"
-        CROSS_AR="${TARGET_PROC}-linux-gnu-ar"
-        CROSS_RANLIB="${TARGET_PROC}-linux-gnu-ranlib"
-        CROSS_STRIP="${TARGET_PROC}-linux-gnu-strip"
-        CROSS_OBJCOPY="${TARGET_PROC}-linux-gnu-objcopy"
-        CROSS_LD="${TARGET_PROC}-linux-gnu-ld"
+    case "$TARGET_PROC" in
+        arm) CROSS_PREFIX="arm-linux-gnueabihf-" ;;
+        *)   CROSS_PREFIX="${TARGET_PROC}-linux-gnu-" ;;
+    esac
+    if command -v "${CROSS_PREFIX}gcc" >/dev/null; then
+        CROSS_CC="${CROSS_PREFIX}gcc"
+        CROSS_CXX="${CROSS_PREFIX}g++"
+        CROSS_AR="${CROSS_PREFIX}ar"
+        CROSS_RANLIB="${CROSS_PREFIX}ranlib"
+        CROSS_STRIP="${CROSS_PREFIX}strip"
+        CROSS_OBJCOPY="${CROSS_PREFIX}objcopy"
+        CROSS_LD="${CROSS_PREFIX}ld"
     else
         CROSS_CC="clang"
         CROSS_CXX="clang++"
@@ -551,7 +604,7 @@ cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
     -DLLVM_PARALLEL_LINK_JOBS=1 \
     -DCLANG_DEFAULT_LINKER=lld \
     -DCLANG_DEFAULT_OBJCOPY=llvm-objcopy \
-    -DCLANG_VENDOR="Apex-Android ($REVISION_CLEAN)" \
+    -DCLANG_VENDOR="Apex ($REVISION_CLEAN)" \
     "${CMAKE_EXTRA_FLAGS[@]}"
 
 # 9. Build and install distribution components
@@ -578,7 +631,7 @@ fi
 # 11. Verification
 if [ "$VERIFY_AFTER_BUILD" = true ]; then
     log "Verifying built LLVM..."
-    "$SCRIPT_DIR/verify-llvm.sh" --dir="$INSTALL_DIR" --revision="$REVISION_CLEAN" --target="$TARGET_CANONICAL"
+    "$SCRIPT_DIR/verify-llvm.sh" --dir="$INSTALL_DIR" --revision="$REVISION_CLEAN" --target="$TARGET_CANONICAL" --platform="$PLATFORM"
 fi
 
 # 12. Packaging

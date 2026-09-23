@@ -1,19 +1,25 @@
-# Apex Android Toolchains - Unified Releases Matrix
-# Host: Linux ARM64 (aarch64)
-# Targets: Android ARM64 (aarch64-linux-android), Android ARM32 (arm-linux-androideabi)
+# Apex Toolchains - Unified Releases Matrix
+# Hosts: Android Bionic & Linux GNU
+# Targets: Android ARM64, ARM32, x86_64, x86
 
 project:
-  name: "apex-android-toolchains"
-  description: "Monorepo for Custom Android LLVM/Clang and Custom Android NDK for Linux ARM64 Host"
-  host_architecture: "aarch64"
-  host_platform: "linux-arm64"
-  target_architectures:
-    - name: "Android ARM64"
-      triple: "aarch64-linux-android"
-      abi: "arm64-v8a"
-    - name: "Android ARM32"
-      triple: "arm-linux-androideabi"
-      abi: "armeabi-v7a"
+  name: "apex-toolchains"
+  description: "Monorepo for Custom LLVM/Clang and Custom Android NDK for Android (Bionic) and Linux (GNU) Hosts"
+  host_platforms:
+    - name: "bionic"
+      description: "Native Android Bionic (Termux, PRoot, Android Native)"
+      targets:
+        - "aarch64-linux-android"
+        - "armv7a-linux-androideabi"
+        - "x86_64-linux-android"
+        - "i686-linux-android"
+    - name: "linux"
+      description: "Standard GNU/Linux (glibc)"
+      targets:
+        - "aarch64-linux-gnu"
+        - "armv7a-linux-gnueabihf"
+        - "x86_64-linux-gnu"
+        - "i686-linux-gnu"
 
 dependency_pipeline:
   - step: 1
@@ -21,10 +27,10 @@ dependency_pipeline:
     description: "Fetch exact AOSP llvm-project commit and downstream patches"
   - step: 2
     name: "build_llvm"
-    description: "Build native Linux ARM64 LLVM/Clang toolchain"
+    description: "Build native LLVM/Clang toolchain"
   - step: 3
     name: "package_llvm"
-    description: "Validate ELF AArch64 and create custom-llvm-*.tar.xz with SHA256/SHA512"
+    description: "Validate ELF and create custom-llvm-*.tar.xz with individual SHA256"
   - step: 4
     name: "release_llvm"
     description: "Publish to GitHub & GitLab releases with git tag llvm-*"

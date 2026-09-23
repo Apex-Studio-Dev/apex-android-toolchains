@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - build-all-ndk.sh
+# Apex Toolchains - build-all-ndk.sh
 # Batch orchestrator to build all 13 Custom Android NDK releases (r26 - r30)
 # strictly reusing pre-released LLVM artifacts
 # ==============================================================================
@@ -13,8 +13,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 METADATA_FILE="$ROOT_DIR/metadata/ndk-releases.yaml"
 
-TARGET="${TARGET:-aarch64-linux-android}"
-PLATFORM="${PLATFORM:-bionic}"
+TARGET="${TARGET:-}"
+PLATFORM="${PLATFORM:-}"
 REBUILD_LLVM=false
 
 log() { printf '\033[1;35m[build-all-ndk]==>\033[0m %s\n' "$*"; }
@@ -24,7 +24,7 @@ usage() {
 Usage: $0 [options]
 
 Options:
-  --target=<triple>    Host target triple (default: aarch64-linux-android)
+  --target=<triple>    Host target triple (default: aarch64-linux-android for bionic, aarch64-linux-gnu for linux)
   --platform=<plat>    Target execution platform: bionic (default) | linux
   --rebuild-llvm       Force rebuild of LLVM if not present
   -h, --help           Show this help message
@@ -44,6 +44,24 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+# Infer platform from target if not explicitly passed
+if [ -z "$PLATFORM" ]; then
+    case "$TARGET" in
+        *-linux-gnu*|linux-gnu*) PLATFORM="linux" ;;
+        *-linux-android*|linux-android*) PLATFORM="bionic" ;;
+        *) PLATFORM="bionic" ;;
+    esac
+fi
+
+# Default target if empty
+if [ -z "$TARGET" ]; then
+    if [ "$PLATFORM" = "linux" ]; then
+        TARGET="aarch64-linux-gnu"
+    else
+        TARGET="aarch64-linux-android"
+    fi
+fi
 
 # Read all releases from metadata
 RELEASES=($(python3 -c "

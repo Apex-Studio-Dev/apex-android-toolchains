@@ -3,7 +3,7 @@ if [ -z "$BASH_VERSION" ]; then
     exec bash "$0" "$@"
 fi
 # ==============================================================================
-# Apex Android Toolchains - build-ndk.sh
+# Apex Toolchains - build-ndk.sh
 # Build Custom Android NDK for Linux ARM64 (aarch64) Host
 # Uses pre-released LLVM artifact without recompilation (unless --rebuild-llvm is given)
 # Supports Bionic execution on Android (Termux/Android native) and Linux ARM64
@@ -32,8 +32,8 @@ Usage: $0 --release=<version> [options]
 
 Options:
   --release=<ver>      NDK release (e.g. r26d, r27b, r28c, r29, r30)
-  --target=<triple>    Host execution target (default: aarch64-linux-android)
-                       [aarch64-linux-android | armv7a-linux-androideabi | x86_64-linux-android | i686-linux-android]
+  --target=<triple>    Host execution target (default: aarch64-linux-android for bionic, aarch64-linux-gnu for linux)
+                       [aarch64 | armv7a | x86_64 | i686] or full triple
   --platform=<plat>    Host execution platform: bionic (default) | linux
   --rebuild-llvm       Force local compilation of LLVM from source
   --jobs=<N>           Build parallelism (default: $JOBS)
@@ -44,7 +44,7 @@ EOF
     exit 1
 }
 
-TARGET="${TARGET:-aarch64-linux-android}"
+TARGET="${TARGET:-}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -67,39 +67,93 @@ done
 
 [ -n "$RELEASE" ] || { err "Release is required (--release=<version>)"; usage; }
 
-# Canonicalize target architecture
-case "$TARGET" in
-    aarch64*|arm64*|linux-arm64)
-        TARGET_CANONICAL="aarch64-linux-android"
-        TARGET_ARCH="arm64"
-        HOST_TAG="linux-arm64"
-        ZIG_TARGET="aarch64-linux-musl"
-        ;;
-    arm*|linux-arm)
-        TARGET_CANONICAL="armv7a-linux-androideabi"
-        TARGET_ARCH="arm"
-        HOST_TAG="linux-arm"
-        ZIG_TARGET="arm-linux-musleabihf"
-        ;;
-    x86_64*|amd64*|linux-x86_64)
-        TARGET_CANONICAL="x86_64-linux-android"
-        TARGET_ARCH="x86_64"
-        HOST_TAG="linux-x86_64"
-        ZIG_TARGET="x86_64-linux-musl"
-        ;;
-    i*86*|x86*|linux-x86)
-        TARGET_CANONICAL="i686-linux-android"
-        TARGET_ARCH="x86"
-        HOST_TAG="linux-x86"
-        ZIG_TARGET="x86-linux-musl"
-        ;;
-    *)
-        TARGET_CANONICAL="$TARGET"
-        TARGET_ARCH="arm64"
-        HOST_TAG="linux-arm64"
-        ZIG_TARGET="aarch64-linux-musl"
-        ;;
-esac
+# Infer platform from target if not explicitly passed
+if [ -z "$PLATFORM" ]; then
+    case "$TARGET" in
+        *-linux-gnu*|linux-gnu*) PLATFORM="linux" ;;
+        *-linux-android*|linux-android*) PLATFORM="bionic" ;;
+        *) PLATFORM="bionic" ;;
+    esac
+fi
+
+# Default target if empty
+if [ -z "$TARGET" ]; then
+    if [ "$PLATFORM" = "linux" ]; then
+        TARGET="aarch64-linux-gnu"
+    else
+        TARGET="aarch64-linux-android"
+    fi
+fi
+
+# Canonicalize target architecture based on platform
+if [ "$PLATFORM" = "linux" ]; then
+    case "$TARGET" in
+        aarch64-linux-gnu|aarch64*|arm64*|linux-arm64)
+            TARGET_CANONICAL="aarch64-linux-gnu"
+            TARGET_ARCH="arm64"
+            HOST_TAG="linux-arm64"
+            ZIG_TARGET="aarch64-linux-musl"
+            ;;
+        arm-linux-gnueabihf|armv7a-linux-gnueabihf|arm*|linux-arm)
+            TARGET_CANONICAL="armv7a-linux-gnueabihf"
+            TARGET_ARCH="arm"
+            HOST_TAG="linux-arm"
+            ZIG_TARGET="arm-linux-musleabihf"
+            ;;
+        x86_64-linux-gnu|x86_64*|amd64*|linux-x86_64)
+            TARGET_CANONICAL="x86_64-linux-gnu"
+            TARGET_ARCH="x86_64"
+            HOST_TAG="linux-x86_64"
+            ZIG_TARGET="x86_64-linux-musl"
+            ;;
+        i686-linux-gnu|i*86*|x86*|linux-x86)
+            TARGET_CANONICAL="i686-linux-gnu"
+            TARGET_ARCH="x86"
+            HOST_TAG="linux-x86"
+            ZIG_TARGET="x86-linux-musl"
+            ;;
+        *)
+            TARGET_CANONICAL="$TARGET"
+            TARGET_ARCH="arm64"
+            HOST_TAG="linux-arm64"
+            ZIG_TARGET="aarch64-linux-musl"
+            ;;
+    esac
+else
+    # bionic platform
+    case "$TARGET" in
+        aarch64-linux-android|aarch64*|arm64*|linux-arm64)
+            TARGET_CANONICAL="aarch64-linux-android"
+            TARGET_ARCH="arm64"
+            HOST_TAG="linux-arm64"
+            ZIG_TARGET="aarch64-linux-musl"
+            ;;
+        arm-linux-androideabi|armv7a-linux-androideabi|arm*|linux-arm)
+            TARGET_CANONICAL="armv7a-linux-androideabi"
+            TARGET_ARCH="arm"
+            HOST_TAG="linux-arm"
+            ZIG_TARGET="arm-linux-musleabihf"
+            ;;
+        x86_64-linux-android|x86_64*|amd64*|linux-x86_64)
+            TARGET_CANONICAL="x86_64-linux-android"
+            TARGET_ARCH="x86_64"
+            HOST_TAG="linux-x86_64"
+            ZIG_TARGET="x86_64-linux-musl"
+            ;;
+        i686-linux-android|i*86*|x86*|linux-x86)
+            TARGET_CANONICAL="i686-linux-android"
+            TARGET_ARCH="x86"
+            HOST_TAG="linux-x86"
+            ZIG_TARGET="x86-linux-musl"
+            ;;
+        *)
+            TARGET_CANONICAL="$TARGET"
+            TARGET_ARCH="arm64"
+            HOST_TAG="linux-arm64"
+            ZIG_TARGET="aarch64-linux-musl"
+            ;;
+    esac
+fi
 
 # Normalize release: strip ndk- prefix if passed
 RELEASE_CLEAN="${RELEASE#ndk-}"
@@ -548,7 +602,7 @@ fi
 # 7. Verification
 if [ "$VERIFY_AFTER_BUILD" = true ]; then
     log "Verifying assembled NDK cross-compilation capability..."
-    "$SCRIPT_DIR/verify-ndk.sh" --ndk="$NDK_ROOT" --release="$RELEASE_CLEAN" --target="$TARGET_CANONICAL"
+    "$SCRIPT_DIR/verify-ndk.sh" --ndk="$NDK_ROOT" --release="$RELEASE_CLEAN" --target="$TARGET_CANONICAL" --platform="$PLATFORM"
 fi
 
 # 8. Package

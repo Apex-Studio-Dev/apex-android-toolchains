@@ -207,8 +207,7 @@ if res:
     print(res)
 else:
     sys.exit(1)
-"
-)
+")"
 
 if [ -z "$META" ]; then
     err "NDK release $RELEASE_CLEAN not found in $NDK_META"

@@ -13,6 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 METADATA_FILE="$ROOT_DIR/metadata/ndk-releases.yaml"
 
+TARGET="${TARGET:-aarch64-linux-android}"
 PLATFORM="${PLATFORM:-bionic}"
 REBUILD_LLVM=false
 
@@ -23,6 +24,7 @@ usage() {
 Usage: $0 [options]
 
 Options:
+  --target=<triple>    Host target triple (default: aarch64-linux-android)
   --platform=<plat>    Target execution platform: bionic (default) | linux
   --rebuild-llvm       Force rebuild of LLVM if not present
   -h, --help           Show this help message
@@ -32,6 +34,8 @@ EOF
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --target=*) TARGET="${1#*=}" ;;
+        --target) shift; TARGET="$1" ;;
         --platform=*) PLATFORM="${1#*=}" ;;
         --platform) shift; PLATFORM="$1" ;;
         --rebuild-llvm) REBUILD_LLVM=true ;;
@@ -50,20 +54,20 @@ for r in data.get('releases', []):
     print(r['release'])
 "))
 
-log "Found ${#RELEASES[@]} NDK releases to assemble: ${RELEASES[*]}"
+log "Found ${#RELEASES[@]} NDK releases to assemble: ${RELEASES[*]} (Target: $TARGET)"
 
 for rel in "${RELEASES[@]}"; do
     log "============================================================"
-    log "Assembling Custom Android NDK: $rel"
+    log "Assembling Custom Android NDK: $rel ($TARGET)"
     log "============================================================"
     
-    ARTIFACT="custom-android-ndk-${rel}-linux-arm64.tar.xz"
+    ARTIFACT="custom-android-ndk-${rel}-${TARGET}.tar.xz"
     if [ -f "$ROOT_DIR/build/artifacts/$ARTIFACT" ]; then
         log "Artifact $ARTIFACT already exists. Skipping assembly."
         continue
     fi
 
-    NDK_ARGS=( "--release=$rel" "--platform=$PLATFORM" )
+    NDK_ARGS=( "--release=$rel" "--target=$TARGET" "--platform=$PLATFORM" )
     [ "$REBUILD_LLVM" = true ] && NDK_ARGS+=( "--rebuild-llvm" )
 
     "$SCRIPT_DIR/build-ndk.sh" "${NDK_ARGS[@]}"

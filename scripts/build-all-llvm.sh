@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 METADATA_FILE="$ROOT_DIR/metadata/llvm-releases.yaml"
 
+TARGET="${TARGET:-aarch64-linux-android}"
 PLATFORM="${PLATFORM:-bionic}"
 REBUILD=false
 
@@ -22,6 +23,7 @@ usage() {
 Usage: $0 [options]
 
 Options:
+  --target=<triple>    Host target triple (default: aarch64-linux-android)
   --platform=<plat>    Target platform: bionic (default) | linux
   --rebuild            Force rebuilding even if artifact exists
   -h, --help           Show this help message
@@ -31,6 +33,8 @@ EOF
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --target=*) TARGET="${1#*=}" ;;
+        --target) shift; TARGET="$1" ;;
         --platform=*) PLATFORM="${1#*=}" ;;
         --platform) shift; PLATFORM="$1" ;;
         --rebuild) REBUILD=true ;;
@@ -49,21 +53,21 @@ for r in data.get('releases', []):
     print(r['revision'])
 "))
 
-log "Found ${#REVISIONS[@]} LLVM revisions to process: ${REVISIONS[*]}"
+log "Found ${#REVISIONS[@]} LLVM revisions to process: ${REVISIONS[*]} (Target: $TARGET)"
 
 for rev in "${REVISIONS[@]}"; do
     log "------------------------------------------------------------"
-    log "Processing LLVM Revision: $rev"
+    log "Processing LLVM Revision: $rev ($TARGET)"
     log "------------------------------------------------------------"
     
     # Check if artifact exists
-    ARTIFACT="custom-llvm-${rev#clang-}-linux-arm64.tar.xz"
+    ARTIFACT="custom-llvm-${rev#clang-}-${TARGET}.tar.xz"
     if [ "$REBUILD" = false ] && [ -f "$ROOT_DIR/build/artifacts/$ARTIFACT" ]; then
         log "Artifact $ARTIFACT already exists. Skipping compilation."
         continue
     fi
 
-    "$SCRIPT_DIR/build-llvm.sh" --revision="$rev" --platform="$PLATFORM"
+    "$SCRIPT_DIR/build-llvm.sh" --revision="$rev" --target="$TARGET" --platform="$PLATFORM"
 done
 
 log "All LLVM revisions processed successfully!"

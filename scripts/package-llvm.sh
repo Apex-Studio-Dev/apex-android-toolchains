@@ -4,7 +4,7 @@ if [ -z "$BASH_VERSION" ]; then
 fi
 # ==============================================================================
 # Apex Android Toolchains - package-llvm.sh
-# Package built LLVM into custom-llvm-<revision>-linux-arm64.tar.xz with checksums
+# Package built LLVM into custom-llvm-<revision>-<target>.tar.xz
 # ==============================================================================
 set -euo pipefail
 

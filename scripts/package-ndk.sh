@@ -4,7 +4,7 @@ if [ -z "$BASH_VERSION" ]; then
 fi
 # ==============================================================================
 # Apex Android Toolchains - package-ndk.sh
-# Package assembled Custom NDK into custom-android-ndk-rXX-linux-arm64.tar.xz
+# Package assembled Custom NDK into custom-android-ndk-<release>-<target>.tar.xz
 # ==============================================================================
 set -euo pipefail
 

@@ -257,7 +257,8 @@ int main(void) { return 0; }
 EOF
 
 log "Testing multi-arch code generation from this single compiler..."
-if "${EXEC_WRAPPER[@]}" "$CLANG" --target=aarch64-linux-android30 -c "$TMP_TEST/test.c" -o "$TMP_TEST/test_arm64.o" 2>/dev/null; then
+C_ERR="$TMP_TEST/compile_err.log"
+if "${EXEC_WRAPPER[@]}" "$CLANG" --target=aarch64-linux-android30 -c "$TMP_TEST/test.c" -o "$TMP_TEST/test_arm64.o" >"$C_ERR" 2>&1; then
     "${EXEC_WRAPPER[@]}" "$CLANG" --target=armv7a-linux-androideabi30 -c "$TMP_TEST/test.c" -o "$TMP_TEST/test_arm32.o" 2>/dev/null || true
     "${EXEC_WRAPPER[@]}" "$CLANG" --target=x86_64-linux-android30 -c "$TMP_TEST/test.c" -o "$TMP_TEST/test_x86_64.o" 2>/dev/null || true
     "${EXEC_WRAPPER[@]}" "$CLANG" --target=i686-linux-android30 -c "$TMP_TEST/test.c" -o "$TMP_TEST/test_x86.o" 2>/dev/null || true
@@ -265,6 +266,9 @@ if "${EXEC_WRAPPER[@]}" "$CLANG" --target=aarch64-linux-android30 -c "$TMP_TEST/
     readelf -h "$TMP_TEST/test_arm64.o" 2>/dev/null | grep -q "Machine:[[:space:]]*AArch64" || true
     log "PASS: Multi-target code generation verified for all Android architectures!"
 else
+    if [ -s "$C_ERR" ]; then
+        log "Compiler output: $(cat "$C_ERR" | head -n 5)"
+    fi
     log "NOTICE: Emulated code generation test bypassed; binary ELF headers & symbols verified."
 fi
 

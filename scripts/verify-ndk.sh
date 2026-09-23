@@ -289,11 +289,12 @@ log "=========================================================="
 
 ARM64_OUT="$TMP_TEST/hello_aarch64"
 ARM64_WRAPPER="$TC_DIR/bin/aarch64-linux-android30-clang"
+ARM64_ERR="$TMP_TEST/arm64_err.log"
 
 if [ -x "$ARM64_WRAPPER" ]; then
-    "${EXEC_WRAPPER[@]}" "$ARM64_WRAPPER" "$TMP_TEST/hello.c" -o "$ARM64_OUT" 2>/dev/null || true
+    "${EXEC_WRAPPER[@]}" "$ARM64_WRAPPER" "$TMP_TEST/hello.c" -o "$ARM64_OUT" >"$ARM64_ERR" 2>&1 || true
 else
-    "${EXEC_WRAPPER[@]}" "$CLANG_BIN" --target=aarch64-linux-android30 --sysroot="$SYSROOT" "$TMP_TEST/hello.c" -o "$ARM64_OUT" 2>/dev/null || true
+    "${EXEC_WRAPPER[@]}" "$CLANG_BIN" --target=aarch64-linux-android30 --sysroot="$SYSROOT" "$TMP_TEST/hello.c" -o "$ARM64_OUT" >"$ARM64_ERR" 2>&1 || true
 fi
 
 if [ -f "$ARM64_OUT" ]; then
@@ -322,6 +323,9 @@ if [ -f "$ARM64_OUT" ]; then
     fi
     log "PASS: Android ARM64 (aarch64-linux-android30) binary successfully built and verified!"
 else
+    if [ -s "$ARM64_ERR" ]; then
+        log "Compiler output: $(cat "$ARM64_ERR" | head -n 5)"
+    fi
     log "NOTICE: Host emulation could not execute ARM64 compilation test; host binary ELF confirmed."
 fi
 
@@ -331,11 +335,12 @@ log "=========================================================="
 
 ARM32_OUT="$TMP_TEST/hello_arm32"
 ARM32_WRAPPER="$TC_DIR/bin/armv7a-linux-androideabi30-clang"
+ARM32_ERR="$TMP_TEST/arm32_err.log"
 
 if [ -x "$ARM32_WRAPPER" ]; then
-    "${EXEC_WRAPPER[@]}" "$ARM32_WRAPPER" "$TMP_TEST/hello.c" -o "$ARM32_OUT" 2>/dev/null || true
+    "${EXEC_WRAPPER[@]}" "$ARM32_WRAPPER" "$TMP_TEST/hello.c" -o "$ARM32_OUT" >"$ARM32_ERR" 2>&1 || true
 else
-    "${EXEC_WRAPPER[@]}" "$CLANG_BIN" --target=armv7a-linux-androideabi30 --sysroot="$SYSROOT" -march=armv7-a "$TMP_TEST/hello.c" -o "$ARM32_OUT" 2>/dev/null || true
+    "${EXEC_WRAPPER[@]}" "$CLANG_BIN" --target=armv7a-linux-androideabi30 --sysroot="$SYSROOT" -march=armv7-a "$TMP_TEST/hello.c" -o "$ARM32_OUT" >"$ARM32_ERR" 2>&1 || true
 fi
 
 if [ -f "$ARM32_OUT" ]; then
@@ -374,14 +379,17 @@ if [ -x "$X86_64_WRAPPER" ] || [ -d "$SYSROOT/usr/lib/x86_64-linux-android" ]; t
     log "TEST 3: Cross-compiling for Android x86_64 (x86_64-linux-android30)"
     log "=========================================================="
     X86_64_OUT="$TMP_TEST/hello_x86_64"
+    X86_64_ERR="$TMP_TEST/x86_64_err.log"
     if [ -x "$X86_64_WRAPPER" ]; then
-        "${EXEC_WRAPPER[@]}" "$X86_64_WRAPPER" "$TMP_TEST/hello.c" -o "$X86_64_OUT" 2>/dev/null || true
+        "${EXEC_WRAPPER[@]}" "$X86_64_WRAPPER" "$TMP_TEST/hello.c" -o "$X86_64_OUT" >"$X86_64_ERR" 2>&1 || true
     else
-        "${EXEC_WRAPPER[@]}" "$CLANG_BIN" --target=x86_64-linux-android30 --sysroot="$SYSROOT" "$TMP_TEST/hello.c" -o "$X86_64_OUT" 2>/dev/null || true
+        "${EXEC_WRAPPER[@]}" "$CLANG_BIN" --target=x86_64-linux-android30 --sysroot="$SYSROOT" "$TMP_TEST/hello.c" -o "$X86_64_OUT" >"$X86_64_ERR" 2>&1 || true
     fi
     if [ -f "$X86_64_OUT" ]; then
         file "$X86_64_OUT" | sed 's/^/  /'
         log "PASS: Android x86_64 binary verified!"
+    elif [ -s "$X86_64_ERR" ]; then
+        log "Compiler output: $(cat "$X86_64_ERR" | head -n 5)"
     fi
 fi
 
@@ -392,14 +400,17 @@ if [ -x "$I686_WRAPPER" ] || [ -d "$SYSROOT/usr/lib/i686-linux-android" ]; then
     log "TEST 4: Cross-compiling for Android x86 (i686-linux-android30)"
     log "=========================================================="
     I686_OUT="$TMP_TEST/hello_i686"
+    I686_ERR="$TMP_TEST/i686_err.log"
     if [ -x "$I686_WRAPPER" ]; then
-        "${EXEC_WRAPPER[@]}" "$I686_WRAPPER" "$TMP_TEST/hello.c" -o "$I686_OUT" 2>/dev/null || true
+        "${EXEC_WRAPPER[@]}" "$I686_WRAPPER" "$TMP_TEST/hello.c" -o "$I686_OUT" >"$I686_ERR" 2>&1 || true
     else
-        "${EXEC_WRAPPER[@]}" "$CLANG_BIN" --target=i686-linux-android30 --sysroot="$SYSROOT" "$TMP_TEST/hello.c" -o "$I686_OUT" 2>/dev/null || true
+        "${EXEC_WRAPPER[@]}" "$CLANG_BIN" --target=i686-linux-android30 --sysroot="$SYSROOT" "$TMP_TEST/hello.c" -o "$I686_OUT" >"$I686_ERR" 2>&1 || true
     fi
     if [ -f "$I686_OUT" ]; then
         file "$I686_OUT" | sed 's/^/  /'
         log "PASS: Android x86 32-bit binary verified!"
+    elif [ -s "$I686_ERR" ]; then
+        log "Compiler output: $(cat "$I686_ERR" | head -n 5)"
     fi
 fi
 

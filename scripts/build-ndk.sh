@@ -340,9 +340,9 @@ if [ "$PLATFORM" = "bionic" ]; then
     CROSS_RANLIB="$TC/bin/llvm-ranlib"
     CROSS_STRIP="$TC/bin/llvm-strip"
     CROSS_OBJCOPY="$TC/bin/llvm-objcopy"
-    CROSS_CFLAGS="-O3 -flto -fdata-sections -ffunction-sections -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong -static"
-    CROSS_CXXFLAGS="-O3 -flto -fdata-sections -ffunction-sections -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong -static"
-    CROSS_LDFLAGS="-static -Wl,--gc-sections -Wl,--icf=all"
+    CROSS_CFLAGS="-O2 -fPIC -fdata-sections -ffunction-sections -Wno-incompatible-pointer-types -Wno-deprecated-non-prototype -Wno-error=implicit-function-declaration -fstack-protector-strong"
+    CROSS_CXXFLAGS="$CROSS_CFLAGS"
+    CROSS_LDFLAGS="-static-libstdc++ -Wl,-z,max-page-size=16384 -Wl,--gc-sections"
 elif command -v "${GNU_TRIPLE}-gcc" >/dev/null; then
     CROSS_CC="${GNU_TRIPLE}-gcc"
     CROSS_CXX="${GNU_TRIPLE}-g++"
@@ -351,9 +351,9 @@ elif command -v "${GNU_TRIPLE}-gcc" >/dev/null; then
     CROSS_RANLIB="${GNU_TRIPLE}-ranlib"
     CROSS_STRIP="${GNU_TRIPLE}-strip"
     CROSS_OBJCOPY="${GNU_TRIPLE}-objcopy"
-    CROSS_CFLAGS="-O2 -fPIC"
-    CROSS_CXXFLAGS="-O2 -fPIC"
-    CROSS_LDFLAGS="-static-libgcc -static-libstdc++"
+    CROSS_CFLAGS="-O2 -fPIC -fdata-sections -ffunction-sections"
+    CROSS_CXXFLAGS="-O2 -fPIC -fdata-sections -ffunction-sections"
+    CROSS_LDFLAGS="-static-libgcc -static-libstdc++ -Wl,--gc-sections"
 else
     CROSS_CC="clang"
     CROSS_CXX="clang++"
@@ -490,8 +490,8 @@ find "$NDK_TOOLCHAIN/bin" -type f | while IFS= read -r file; do
     bname="$(basename "$file")"
     if [ -f "$HOST_LLVM_DIR/bin/$bname" ] && file "$file" | grep -q 'ELF'; then
         cp -f "$HOST_LLVM_DIR/bin/$bname" "$file"
-    elif file "$file" | grep -q 'Bourne-Again shell script'; then
-        sed -i 's,#!/usr/bin/env bash,#!/usr/bin/env sh,' "$file"
+    elif file "$file" | grep -Eq 'Bourne-Again shell script|shell script|POSIX shell script'; then
+        sed -i '1s|^#!.*|#!/bin/sh|' "$file"
     elif ! file "$file" | grep -Eq 'Python script|Perl script|ASCII text'; then
         # Any remaining unreplaced ELF binary is host x86_64; remove it to prevent execution failures on target
         rm -f "$file"
@@ -558,15 +558,12 @@ if [ -d "$HOST_LLVM_DIR/lib/clang" ]; then
     cp -Rf "$HOST_LLVM_DIR/lib/clang" "$NDK_TOOLCHAIN/lib/"
 fi
 
-# Update shebangs for portability across bionic and linux
-for sh_file in "$NDK_ROOT/build/tools/ndk_bin_common.sh" "$NDK_ROOT/build/tools/make_standalone_toolchain.py" "$NDK_ROOT/build/ndk-build"; do
-    [ -f "$sh_file" ] && sed -i 's,#!/usr/bin/env bash,#!/usr/bin/env sh,' "$sh_file"
-done
-for sh_bin in "$NDK_ROOT/ndk-gdb" "$NDK_ROOT/ndk-lldb" "$NDK_ROOT/ndk-stack" "$NDK_ROOT/ndk-which" "$PREBUILT_BIN/ndk-gdb" "$PREBUILT_BIN/ndk-stack" "$PREBUILT_BIN/ndk-which"; do
-    if [ -f "$sh_bin" ]; then
-        sed -i 's,#!/bin/bash,#!/bin/sh,' "$sh_bin"
-        sed -i 's,#!/usr/bin/env bash,#!/usr/bin/env sh,' "$sh_bin"
-        sed -i "s|linux-x86_64|$HOST_TAG|g" "$sh_bin"
+# Update shebangs for universal portability across bionic and linux
+log "Normalizing all shell script shebangs to /bin/sh across NDK..."
+find "$NDK_ROOT" -type f | while IFS= read -r file; do
+    if head -n 1 "$file" 2>/dev/null | grep -Eq '^#!.*(bash|sh)'; then
+        sed -i '1s|^#!.*|#!/bin/sh|' "$file"
+        sed -i "s|linux-x86_64|$HOST_TAG|g" "$file" 2>/dev/null || true
     fi
 done
 

@@ -387,43 +387,20 @@ if [ "$PLATFORM" = "bionic" ]; then
     CROSS_LD="$TC/bin/ld"
     TRIPLE="${TARGET_CANONICAL}${API}"
     
-    # 100% static Bionic compilation: no dynamic glibc or ld-linux dependencies!
-    CROSS_CFLAGS="-static -fno-sanitize=undefined -fdata-sections -ffunction-sections"
+    # Native Android Bionic compilation (works universally across all Android devices)
+    # Statically link libc++ so it has zero external C++ runtime dependencies,
+    # relying only on standard Android system libraries (/system/bin/linker*, libc.so, libdl.so, libm.so).
+    # Avoid -Wl,--icf=all to prevent folding function pointers in LLVM pass registries (TargetPassConfig).
+    CROSS_CFLAGS="-fno-sanitize=undefined -fdata-sections -ffunction-sections -fPIC"
     CROSS_CXXFLAGS="$CROSS_CFLAGS -fvisibility-inlines-hidden"
-    CROSS_LDFLAGS="-static -Wl,-z,max-page-size=16384 -Wl,--gc-sections -Wl,--icf=all"
-    LLVM_STATIC=ON
+    CROSS_LDFLAGS="-static-libstdc++ -Wl,-z,max-page-size=16384 -Wl,--gc-sections"
+    LLVM_STATIC=OFF
+    LLVM_PIC=ON
     SYSTEM_NAME="Linux"
 
     log "Using Android NDK Clang cross-compiler: $CROSS_CC"
-
-    # Avoid AArch64 Bionic libc.a conditional branch relocation out of range (R_AARCH64_CONDBR19)
-    # by generating a symbol-ordering file hoisting __set_errno_internal
-    mkdir -p "$BUILD_DIR"
-    printf '%s\n' __set_errno_internal > "$BUILD_DIR/symbol-order.txt"
-    _libc="$(find "$TC/sysroot/usr/lib" -name libc.a 2>/dev/null | grep "/$TARGET_CANONICAL/" | head -n1 || true)"
-    if [ -z "$_libc" ]; then
-        _libc="$(find "$TC/sysroot/usr/lib" -name libc.a 2>/dev/null | head -n1 || true)"
-    fi
-    if [ -n "$_libc" ] && [ -f "$_libc" ] && [ -x "$TC/bin/llvm-nm" ]; then
-        "$TC/bin/llvm-nm" --print-file-name "$_libc" 2>/dev/null > "$BUILD_DIR/libc.nm" || true
-        awk '
-          NF == 1 && /:$/ { mem = $0; next }
-          $1 ~ /:$/ && NF > 2 { mem = $1 }
-          NF >= 2 && $(NF-1) == "U" && $NF == "__set_errno_internal" { ref[mem] = 1; next }
-          NF >= 2 && $(NF-1) ~ /^[TtWw]$/ && !(mem in first) { first[mem] = $NF }
-          END { for (m in ref) if (m in first) print first[m] }
-        ' "$BUILD_DIR/libc.nm" >> "$BUILD_DIR/symbol-order.txt" 2>/dev/null || true
-        rm -f "$BUILD_DIR/libc.nm"
-    fi
-    _so="-Wl,--symbol-ordering-file=$BUILD_DIR/symbol-order.txt -Wl,--no-warn-symbol-ordering"
-    echo 'int main(void){return 0;}' > "$BUILD_DIR/so-probe.c"
-    if "$CROSS_CC" $CROSS_CFLAGS $CROSS_LDFLAGS $_so "$BUILD_DIR/so-probe.c" -o "$BUILD_DIR/so-probe" >/dev/null 2>&1; then
-        CROSS_LDFLAGS="$CROSS_LDFLAGS $_so"
-        log "Enabled Bionic symbol ordering for AArch64 conditional branch protection"
-    fi
-    rm -f "$BUILD_DIR/so-probe.c" "$BUILD_DIR/so-probe"
 else
-    # Linux (musl or glibc)
+    # Linux (standard GNU/glibc for WSL, PRoot, Linux distros)
     case "$TARGET_PROC" in
         arm) CROSS_PREFIX="arm-linux-gnueabihf-" ;;
         *)   CROSS_PREFIX="${TARGET_PROC}-linux-gnu-" ;;
@@ -445,6 +422,12 @@ else
         CROSS_OBJCOPY="llvm-objcopy"
         CROSS_LD="ld.lld"
     fi
+    CROSS_CFLAGS="-O2 -fPIC -fdata-sections -ffunction-sections"
+    CROSS_CXXFLAGS="$CROSS_CFLAGS -fvisibility-inlines-hidden"
+    CROSS_LDFLAGS="-static-libgcc -static-libstdc++ -Wl,--gc-sections"
+    LLVM_STATIC=OFF
+    LLVM_PIC=ON
+    SYSTEM_NAME="Linux"
 fi
 
 # 6. Build static zlib & zstd for the target (bundled static dependencies)
@@ -572,13 +555,14 @@ cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
     -DLLVM_TARGETS_TO_BUILD="${LLVM_TARGETS:-${TARGETS_STR:-AArch64;ARM;X86;RISCV;WebAssembly}}" \
     -DLLVM_ENABLE_PROJECTS="$LLVM_PROJECTS" \
     -DLLVM_DISTRIBUTION_COMPONENTS="$LLVM_DIST_COMPONENTS" \
-    -DLLVM_ENABLE_LTO="${LLVM_LTO:-Thin}" \
+    -DLLVM_ENABLE_LTO="${LLVM_LTO:-OFF}" \
     -DLLVM_ENABLE_UNWIND_TABLES=OFF \
     -DLLVM_BUILD_STATIC=$LLVM_STATIC \
     -DBUILD_SHARED_LIBS=OFF \
     -DLLVM_LINK_LLVM_DYLIB=OFF \
     -DLIBCLANG_BUILD_STATIC=ON \
     -DLLVM_ENABLE_PIC=$LLVM_PIC \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DCMAKE_SKIP_INSTALL_RPATH=TRUE \
     -DLLVM_ENABLE_ZLIB=FORCE_ON \
     -DLLVM_ENABLE_ZSTD=FORCE_ON \

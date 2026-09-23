@@ -119,8 +119,7 @@ Artifacts published to GitHub Releases adhere to standard naming conventions:
   *(e.g., `custom-llvm-r487747e-aarch64-linux-android.tar.xz`)*
 * **NDK Artifact:** `custom-android-ndk-<release>-<target>.tar.xz`
   *(e.g., `custom-android-ndk-r26d-aarch64-linux-android.tar.xz`)*
-* **ARM64 Symlink:** For backward compatibility, `*-linux-arm64.tar.xz` symlinks are provided for ARM64 targets.
-* **Checksums:** Verified `SHA256SUMS` and `SHA512SUMS` accompany every release.
+* **Target Architecture:** Strictly canonical triples (`aarch64-linux-android`, `armv7a-linux-androideabi`, `x86_64-linux-android`, `i686-linux-android`). No duplicate aliases.
 
 ### 1. LLVM / Clang Revisions (Exact AOSP Commits)
 

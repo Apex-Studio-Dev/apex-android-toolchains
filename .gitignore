@@ -16,3 +16,7 @@ build/artifacts/*.zip
 *.swp
 *~
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc

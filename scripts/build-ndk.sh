@@ -165,9 +165,6 @@ log "Requirements: LLVM revision $REQUIRED_LLVM (Target: $TARGET_CANONICAL)"
 
 # 2. Obtain LLVM artifact for this host target
 LLVM_TAR="$ROOT_DIR/build/artifacts/custom-llvm-${REQUIRED_LLVM#clang-}-${TARGET_CANONICAL}.tar.xz"
-if [ ! -f "$LLVM_TAR" ] && [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
-    LLVM_TAR="$ROOT_DIR/build/artifacts/custom-llvm-${REQUIRED_LLVM#clang-}-linux-arm64.tar.xz"
-fi
 HOST_LLVM_DIR="$WORK_DIR/llvm-host"
 
 if [ "$REBUILD_LLVM" = true ]; then
@@ -183,10 +180,6 @@ if [ ! -f "$LLVM_TAR" ]; then
             "$SCRIPT_DIR/build-llvm.sh" --revision="$REQUIRED_LLVM" --target="$TARGET_CANONICAL" --platform="$PLATFORM" --jobs="$JOBS"
         fi
     fi
-fi
-
-if [ ! -f "$LLVM_TAR" ] && [ "$TARGET_CANONICAL" = "aarch64-linux-android" ] && [ -f "$ROOT_DIR/build/artifacts/custom-llvm-${REQUIRED_LLVM#clang-}-linux-arm64.tar.xz" ]; then
-    LLVM_TAR="$ROOT_DIR/build/artifacts/custom-llvm-${REQUIRED_LLVM#clang-}-linux-arm64.tar.xz"
 fi
 
 if [ ! -f "$LLVM_TAR" ]; then
@@ -544,6 +537,12 @@ for dir_prefix in "prebuilt" "toolchains/llvm/prebuilt" "shader-tools"; do
 done
 
 log "NDK assembly complete at $NDK_ROOT"
+
+# Normalize ELF PT_TLS segment alignment across assembled NDK
+if [ -f "$SCRIPT_DIR/normalize-tls.py" ]; then
+    log "Normalizing ELF PT_TLS segment alignment across $NDK_ROOT..."
+    python3 "$SCRIPT_DIR/normalize-tls.py" "$NDK_ROOT" || true
+fi
 
 # 7. Verification
 if [ "$VERIFY_AFTER_BUILD" = true ]; then

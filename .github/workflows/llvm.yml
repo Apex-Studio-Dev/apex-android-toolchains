@@ -218,11 +218,6 @@ jobs:
           - **Git Tag:** \`${TAG}\`
           - **Host Environment:** \`${TARGET}\` (Native execution on this Android/Linux architecture)
           - **Multi-Arch Code Generation:** Capable of cross-compiling to \`arm64-v8a\`, \`armeabi-v7a\`, \`x86_64\`, \`x86\`, and \`riscv64\`.
-
-          ### Checksums
-          \`\`\`
-          $(cat build/artifacts/SHA256SUMS 2>/dev/null || true)
-          \`\`\`
           EOF
 
       - name: Upload Artifact to GitHub Release
@@ -234,9 +229,5 @@ jobs:
           body_path: build/RELEASE_NOTES.md
           files: |
             build/artifacts/custom-llvm-*.tar.xz
-            build/artifacts/*.sha256
-            build/artifacts/*.sha512
-            build/artifacts/SHA256SUMS
-            build/artifacts/SHA512SUMS
           draft: false
           prerelease: false

@@ -66,30 +66,21 @@ log "Packaging $LLVM_DIR into $OUT_TAR..."
 PARENT_DIR="$(dirname "$LLVM_DIR")"
 BASE_DIR="$(basename "$LLVM_DIR")"
 
+# Normalize ELF PT_TLS segment alignment for Android Bionic compatibility
+if [ -f "$SCRIPT_DIR/normalize-tls.py" ]; then
+    log "Normalizing ELF PT_TLS segment alignment across $LLVM_DIR..."
+    python3 "$SCRIPT_DIR/normalize-tls.py" "$LLVM_DIR"
+fi
+
 # Archive using maximum compression
 (
     cd "$PARENT_DIR"
     tar -cf - "$BASE_DIR" | xz -T0 -9e > "$OUT_TAR"
 )
 
-log "Computing cryptographic checksums (SHA256 & SHA512)..."
+log "Artifact generated: $OUT_TAR"
 (
     cd "$OUT_DIR"
-    sha256sum "$ARTIFACT_NAME" > "${ARTIFACT_NAME}.sha256"
-    sha512sum "$ARTIFACT_NAME" > "${ARTIFACT_NAME}.sha512"
-    
-    # Append to cumulative checksum files
-    sha256sum "$ARTIFACT_NAME" >> SHA256SUMS
-    sha512sum "$ARTIFACT_NAME" >> SHA512SUMS
-    # Sort and deduplicate
-    sort -u -k2 SHA256SUMS -o SHA256SUMS
-    sort -u -k2 SHA512SUMS -o SHA512SUMS
-
-    if [ "$TARGET" = "aarch64-linux-android" ] || [ "$TARGET" = "linux-arm64" ]; then
-        ln -sf "$ARTIFACT_NAME" "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" 2>/dev/null || true
-    fi
+    sha256sum "$ARTIFACT_NAME"
 )
-
-log "Artifact generated: $OUT_TAR"
-log "SHA256: $(cat "$OUT_DIR/${ARTIFACT_NAME}.sha256")"
 log "Packaging completed successfully!"

@@ -15,7 +15,7 @@ releases:
     manifest_id: "manifest_10087095.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r487747c-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r487747c-aarch64-linux-android.tar.xz"
     ndk_releases: ["r26"]
 
   - revision: "clang-r487747d"
@@ -27,7 +27,7 @@ releases:
     manifest_id: "manifest_10552028.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r487747d-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r487747d-aarch64-linux-android.tar.xz"
     ndk_releases: ["r26b"]
 
   - revision: "clang-r487747e"
@@ -39,7 +39,7 @@ releases:
     manifest_id: "manifest_11349228.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r487747e-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r487747e-aarch64-linux-android.tar.xz"
     ndk_releases: ["r26c", "r26d"]
 
   - revision: "clang-r522817"
@@ -51,7 +51,7 @@ releases:
     manifest_id: "manifest_12027248.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r522817-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r522817-aarch64-linux-android.tar.xz"
     ndk_releases: ["r27"]
 
   - revision: "clang-r522817b"
@@ -63,7 +63,7 @@ releases:
     manifest_id: "manifest_12285214.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r522817b-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r522817b-aarch64-linux-android.tar.xz"
     ndk_releases: ["r27b"]
 
   - revision: "clang-r522817c"
@@ -75,7 +75,7 @@ releases:
     manifest_id: "manifest_12470979.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r522817c-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r522817c-aarch64-linux-android.tar.xz"
     ndk_releases: ["r27c"]
 
   - revision: "clang-r522817d"
@@ -87,7 +87,7 @@ releases:
     manifest_id: "manifest_13691557.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r522817d-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r522817d-aarch64-linux-android.tar.xz"
     ndk_releases: ["r27d"]
 
   - revision: "clang-r530567b"
@@ -99,7 +99,7 @@ releases:
     manifest_id: "manifest_12642944.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r530567b-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r530567b-aarch64-linux-android.tar.xz"
     ndk_releases: ["r28"]
 
   - revision: "clang-r530567d"
@@ -111,7 +111,7 @@ releases:
     manifest_id: "manifest_13324770.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r530567d-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r530567d-aarch64-linux-android.tar.xz"
     ndk_releases: ["r28b"]
 
   - revision: "clang-r530567e"
@@ -123,7 +123,7 @@ releases:
     manifest_id: "manifest_13624864.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r530567e-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r530567e-aarch64-linux-android.tar.xz"
     ndk_releases: ["r28c"]
 
   - revision: "clang-r563880c"
@@ -135,7 +135,7 @@ releases:
     manifest_id: "manifest_13989888.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r563880c-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r563880c-aarch64-linux-android.tar.xz"
     ndk_releases: ["r29"]
 
   - revision: "clang-r574158c"
@@ -147,5 +147,5 @@ releases:
     manifest_id: "manifest_16134705.xml"
     targets: ["AArch64", "ARM"]
     projects: ["bolt", "clang", "clang-tools-extra", "lld", "polly"]
-    artifact: "custom-llvm-r574158c-linux-arm64.tar.xz"
+    artifact: "custom-llvm-r574158c-aarch64-linux-android.tar.xz"
     ndk_releases: ["r30"]

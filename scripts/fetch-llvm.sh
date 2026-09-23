@@ -138,59 +138,34 @@ log "Found metadata: LLVM $LLVM_VER (llvm-project: $LLVM_PROJ_COMMIT, llvm_andro
 
 fetch_artifact() {
     local target_tag="$TAG_NAME"
-    local candidates=()
-    candidates+=( "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" )
-    if [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
-        candidates+=( "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" )
-        if [ -n "$ARTIFACT_NAME" ] && [ "$ARTIFACT_NAME" != "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" ] && [ "$ARTIFACT_NAME" != "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" ]; then
-            candidates+=( "$ARTIFACT_NAME" )
-        fi
-    fi
+    local art="custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz"
 
     # 1. Check if artifact already exists locally
-    for art in "${candidates[@]}"; do
-        local check_path="$ROOT_DIR/build/artifacts/$art"
-        if [ -f "$check_path" ]; then
-            log "Artifact already exists locally: $check_path"
-            if [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
-                (
-                    cd "$ROOT_DIR/build/artifacts"
-                    ln -sf "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" 2>/dev/null || true
-                    ln -sf "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" 2>/dev/null || true
-                )
-            fi
+    local check_path="$ROOT_DIR/build/artifacts/$art"
+    if [ -f "$check_path" ]; then
+        log "Artifact already exists locally: $check_path"
+        return 0
+    fi
+
+    # 2. Try downloading candidate from releases
+    log "Attempting to fetch released artifact for $TARGET_CANONICAL..."
+    local out_path="$ROOT_DIR/build/artifacts/$art"
+    mkdir -p "$(dirname "$out_path")"
+
+    local urls=(
+        "https://github.com/${REPO_OWNER}/apex-android-toolchains/releases/download/${target_tag}/${art}"
+        "https://gitlab.com/${REPO_OWNER}/apex-android-toolchains/-/releases/${target_tag}/downloads/${art}"
+    )
+
+    for u in "${urls[@]}"; do
+        log "Checking: $u"
+        if curl -fsSL -o "$out_path.tmp" "$u" 2>/dev/null || (command -v aria2c >/dev/null && aria2c -q --allow-overwrite=true -o "$out_path.tmp" "$u" 2>/dev/null); then
+            mv "$out_path.tmp" "$out_path"
+            log "Successfully downloaded artifact to $out_path"
             return 0
         fi
     done
-
-    # 2. Try downloading candidates from releases
-    log "Attempting to fetch released artifact for $TARGET_CANONICAL..."
-    for art in "${candidates[@]}"; do
-        local out_path="$ROOT_DIR/build/artifacts/$art"
-        mkdir -p "$(dirname "$out_path")"
-
-        local urls=(
-            "https://github.com/${REPO_OWNER}/apex-android-toolchains/releases/download/${target_tag}/${art}"
-            "https://gitlab.com/${REPO_OWNER}/apex-android-toolchains/-/releases/${target_tag}/downloads/${art}"
-        )
-
-        for u in "${urls[@]}"; do
-            log "Checking: $u"
-            if curl -fsSL -o "$out_path.tmp" "$u" 2>/dev/null || (command -v aria2c >/dev/null && aria2c -q --allow-overwrite=true -o "$out_path.tmp" "$u" 2>/dev/null); then
-                mv "$out_path.tmp" "$out_path"
-                log "Successfully downloaded artifact to $out_path"
-                if [ "$TARGET_CANONICAL" = "aarch64-linux-android" ]; then
-                    (
-                        cd "$ROOT_DIR/build/artifacts"
-                        ln -sf "$art" "custom-llvm-${REVISION_CLEAN#clang-}-${TARGET_CANONICAL}.tar.xz" 2>/dev/null || true
-                        ln -sf "$art" "custom-llvm-${REVISION_CLEAN#clang-}-linux-arm64.tar.xz" 2>/dev/null || true
-                    )
-                fi
-                return 0
-            fi
-        done
-        rm -f "$out_path.tmp"
-    done
+    rm -f "$out_path.tmp"
 
     return 1
 }

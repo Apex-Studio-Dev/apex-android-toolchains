@@ -64,28 +64,21 @@ log "Packaging $NDK_DIR into $OUT_TAR..."
 PARENT_DIR="$(dirname "$NDK_DIR")"
 BASE_DIR="$(basename "$NDK_DIR")"
 
+# Normalize ELF PT_TLS segment alignment for Android Bionic compatibility
+if [ -f "$SCRIPT_DIR/normalize-tls.py" ]; then
+    log "Normalizing ELF PT_TLS segment alignment across $NDK_DIR..."
+    python3 "$SCRIPT_DIR/normalize-tls.py" "$NDK_DIR"
+fi
+
 # Compress using xz with multithreading
 (
     cd "$PARENT_DIR"
     tar -cf - "$BASE_DIR" | xz -T0 -9e --lzma2=dict=256MiB > "$OUT_TAR"
 )
 
-log "Computing cryptographic checksums (SHA256 & SHA512)..."
+log "Artifact generated: $OUT_TAR"
 (
     cd "$OUT_DIR"
-    sha256sum "$ARTIFACT_NAME" > "${ARTIFACT_NAME}.sha256"
-    sha512sum "$ARTIFACT_NAME" > "${ARTIFACT_NAME}.sha512"
-    
-    sha256sum "$ARTIFACT_NAME" >> SHA256SUMS
-    sha512sum "$ARTIFACT_NAME" >> SHA512SUMS
-    sort -u -k2 SHA256SUMS -o SHA256SUMS
-    sort -u -k2 SHA512SUMS -o SHA512SUMS
-
-    if [ "$TARGET" = "aarch64-linux-android" ] || [ "$TARGET" = "linux-arm64" ]; then
-        ln -sf "$ARTIFACT_NAME" "custom-android-ndk-${RELEASE_CLEAN}-linux-arm64.tar.xz" 2>/dev/null || true
-    fi
+    sha256sum "$ARTIFACT_NAME"
 )
-
-log "Artifact generated: $OUT_TAR"
-log "SHA256: $(cat "$OUT_DIR/${ARTIFACT_NAME}.sha256")"
 log "NDK Packaging completed successfully!"

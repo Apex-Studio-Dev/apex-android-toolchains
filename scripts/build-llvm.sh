@@ -517,6 +517,8 @@ cmake -S "$LLVM_SRC/llvm" -B "$BUILD_DIR" -G Ninja \
     -DLLVM_TARGETS_TO_BUILD="${LLVM_TARGETS:-AArch64;ARM;X86;RISCV;WebAssembly}" \
     -DLLVM_ENABLE_PROJECTS="$LLVM_PROJECTS" \
     -DLLVM_DISTRIBUTION_COMPONENTS="$LLVM_DIST_COMPONENTS" \
+    -DLLVM_ENABLE_LTO="${LLVM_LTO:-Thin}" \
+    -DLLVM_ENABLE_UNWIND_TABLES=OFF \
     -DLLVM_BUILD_STATIC=$LLVM_STATIC \
     -DBUILD_SHARED_LIBS=OFF \
     -DLLVM_LINK_LLVM_DYLIB=OFF \
@@ -559,6 +561,12 @@ log "Stripping installed binaries..."
 find "$INSTALL_DIR/bin" -type f ! -lname '*' | while IFS= read -r f; do
     "$CROSS_STRIP" "$f" 2>/dev/null || true
 done
+
+# Normalize ELF PT_TLS segment alignment across built LLVM
+if [ -f "$SCRIPT_DIR/normalize-tls.py" ]; then
+    log "Normalizing ELF PT_TLS segment alignment across $INSTALL_DIR..."
+    python3 "$SCRIPT_DIR/normalize-tls.py" "$INSTALL_DIR" || true
+fi
 
 # 11. Verification
 if [ "$VERIFY_AFTER_BUILD" = true ]; then
